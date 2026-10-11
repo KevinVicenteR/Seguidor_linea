@@ -1,0 +1,7 @@
+{
+  "name": "AtlasCore",
+  "version": "2.0.0",
+  "description": "Lógica de control del seguidor de línea ATLAS independiente del hardware (sensores, PD, carrera, máquina de estados).",
+  "frameworks": "*",
+  "platforms": "*"
+}

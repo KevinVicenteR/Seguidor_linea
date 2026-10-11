@@ -1,0 +1,8 @@
+{
+  "name": "AtlasAvr",
+  "version": "2.0.0",
+  "description": "Implementación AVR (ATmega328P) de las interfaces de hardware de AtlasCore.",
+  "frameworks": "arduino",
+  "platforms": "atmelavr",
+  "dependencies": [{ "name": "AtlasCore" }]
+}

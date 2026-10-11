@@ -1,0 +1,165 @@
+/*
+  main.cpp - Banco de simulación del firmware ATLAS.
+
+  Corre el firmware real (AtlasCore) contra todas las pistas a varias
+  velocidades, genera el visor interactivo y termina con código 1 si algún
+  escenario obligatorio falla (útil en CI).
+
+  Uso: atlas_sim [--out DIR] [--template RUTA] [--track N] [--quick]
+*/
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <string>
+#include <sys/stat.h>
+#include <thread>
+#include <vector>
+
+#include "Report.h"
+#include "ScenarioRunner.h"
+#include "TrackLibrary.h"
+
+#ifndef ATLAS_VIEWER_TEMPLATE
+#define ATLAS_VIEWER_TEMPLATE "simulation/viewer/viewer_template.html"
+#endif
+
+using namespace sim;
+
+namespace {
+
+struct Options {
+  std::string outputDir = "simulation_output";
+  std::string templatePath = ATLAS_VIEWER_TEMPLATE;
+  int onlyTrack = -1;
+  bool quick = false;
+};
+
+Options parseOptions(int argc, char** argv) {
+  Options options;
+  for (int i = 1; i < argc; i++) {
+    const std::string arg = argv[i];
+    if (arg == "--out" && i + 1 < argc) options.outputDir = argv[++i];
+    else if (arg == "--template" && i + 1 < argc) options.templatePath = argv[++i];
+    else if (arg == "--track" && i + 1 < argc) options.onlyTrack = std::stoi(argv[++i]);
+    else if (arg == "--quick") options.quick = true;
+  }
+  return options;
+}
+
+ScenarioSpec makeSpec(std::size_t track, const std::string& trackName, int16_t pwm, bool required,
+                      const std::string& suffix = "") {
+  ScenarioSpec spec;
+  spec.trackIndex = track;
+  spec.cruisePwm = pwm;
+  spec.required = required;
+  spec.seed = static_cast<uint32_t>(1000 + track * 31 + pwm);
+  spec.label = trackName + " · PWM " + std::to_string(pwm) + suffix;
+  return spec;
+}
+
+std::size_t findTrack(const std::vector<TrackEntry>& tracks, const std::string& name) {
+  for (std::size_t i = 0; i < tracks.size(); i++) {
+    if (tracks[i].track.name() == name) return i;
+  }
+  return 0;
+}
+
+// Alta velocidad: cada pista debe completarse en menos de 40 s a PWM 160,
+// 190 y 220. PWM 250 (el máximo del firmware) se reporta como prueba extrema.
+std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, const Options& options) {
+  const std::vector<int16_t> requiredSpeeds = options.quick ? std::vector<int16_t>{190} : std::vector<int16_t>{160, 190, 220};
+  std::vector<ScenarioSpec> specs;
+
+  for (std::size_t i = 0; i < tracks.size(); i++) {
+    if (options.onlyTrack >= 0 && static_cast<int>(i) != options.onlyTrack) continue;
+    const std::string& name = tracks[i].track.name();
+    for (int16_t pwm : requiredSpeeds) specs.push_back(makeSpec(i, name, pwm, true));
+    if (!options.quick) specs.push_back(makeSpec(i, name, 250, false, " (extremo)"));
+  }
+  if (options.quick || options.onlyTrack >= 0) return specs;
+
+  const std::size_t chicanes = findTrack(tracks, "Chicanas largas");
+  ScenarioSpec black = makeSpec(chicanes, tracks[chicanes].track.name(), 190, true, " · línea negra");
+  black.lineColor = atlas::LineColor::Black;
+  specs.push_back(black);
+
+  const std::size_t hexagon = findTrack(tracks, "Hexágono de figuras");
+  ScenarioSpec blackHexagon = makeSpec(hexagon, tracks[hexagon].track.name(), 190, true, " · línea negra");
+  blackHexagon.lineColor = atlas::LineColor::Black;
+  specs.push_back(blackHexagon);
+
+  const std::size_t star = findTrack(tracks, "Estrella de cinco puntas");
+  ScenarioSpec noisy = makeSpec(star, tracks[star].track.name(), 190, true, " · ruido x3");
+  noisy.sensorNoiseSigma = 12.0;
+  specs.push_back(noisy);
+
+  const std::size_t grandPrix = findTrack(tracks, "Gran Premio");
+  ScenarioSpec noFan = makeSpec(grandPrix, tracks[grandPrix].track.name(), 190, false, " · sin impeller");
+  noFan.impellerPwm = 0;
+  specs.push_back(noFan);
+
+  return specs;
+}
+
+std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs) {
+  std::vector<ScenarioResult> results(specs.size());
+  std::atomic<std::size_t> next{0};
+  std::atomic<std::size_t> done{0};
+  const ScenarioRunner runner;
+
+  auto worker = [&]() {
+    for (std::size_t i = next++; i < specs.size(); i = next++) {
+      results[i] = runner.run(tracks[specs[i].trackIndex], specs[i]);
+      std::fprintf(stderr, "\r  simulando... %zu/%zu", ++done, specs.size());
+    }
+  };
+
+  const unsigned threads = std::max(1u, std::thread::hardware_concurrency());
+  std::vector<std::thread> pool;
+  for (unsigned t = 0; t < threads; t++) pool.emplace_back(worker);
+  for (std::thread& thread : pool) thread.join();
+  std::fprintf(stderr, "\n");
+  return results;
+}
+
+void printSummary(const std::vector<ScenarioResult>& results) {
+  std::printf("\n%-48s %6s %8s %8s %8s %8s %7s  %s\n", "Escenario", "Estado", "Tiempo", "v media", "v máx",
+              "err máx", "perdida", "Falla");
+  std::printf("%s\n", std::string(118, '-').c_str());
+  for (const ScenarioResult& r : results) {
+    const char* status = r.passed() ? "OK" : (r.spec.required ? "FALLA" : "falla*");
+    std::printf("%-48s %6s %7.2fs %6.2fm/s %6.2fm/s %6.0fmm %6.1f%%  %s\n", r.spec.label.c_str(), status, r.raceTime,
+                r.averageSpeed, r.maxSpeed, r.maxOffsetMm, r.lostLinePercent, r.failureReason.c_str());
+  }
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  const Options options = parseOptions(argc, argv);
+  const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  const std::vector<ScenarioSpec> specs = buildScenarios(tracks, options);
+
+  std::printf("ATLAS · banco de simulación: %zu pistas, %zu escenarios\n", tracks.size(), specs.size());
+  const std::vector<ScenarioResult> results = runAll(tracks, specs);
+  printSummary(results);
+
+  mkdir(options.outputDir.c_str(), 0755);
+  const atlas::RobotConfig firmware;
+  const RobotParams robot;
+  const ReportContext context{tracks, results, firmware, robot};
+  writeViewer(options.templatePath, options.outputDir + "/index.html", context);
+  writeSummaryCsv(options.outputDir + "/resumen.csv", context);
+
+  int requiredFailures = 0;
+  int passed = 0;
+  for (const ScenarioResult& r : results) {
+    if (r.passed()) passed++;
+    else if (r.spec.required) requiredFailures++;
+  }
+  std::printf("\nAprobados: %d/%zu   Obligatorios fallidos: %d   (* = prueba extrema, no obligatoria; límite 40 s por pista)\n", passed,
+              results.size(), requiredFailures);
+  std::printf("Visor: %s/index.html\n", options.outputDir.c_str());
+  return requiredFailures == 0 ? 0 : 1;
+}

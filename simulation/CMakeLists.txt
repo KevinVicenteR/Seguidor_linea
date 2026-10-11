@@ -1,0 +1,29 @@
+find_package(Threads REQUIRED)
+
+file(GLOB ATLAS_SIM_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sim/*.cpp)
+list(REMOVE_ITEM ATLAS_SIM_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/sim/main.cpp)
+
+add_library(atlas_sim_lib STATIC ${ATLAS_SIM_SOURCES})
+target_include_directories(atlas_sim_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sim)
+target_link_libraries(atlas_sim_lib PUBLIC atlas_core)
+target_compile_options(atlas_sim_lib PRIVATE -Wall -Wextra)
+
+add_executable(atlas_sim sim/main.cpp)
+target_link_libraries(atlas_sim PRIVATE atlas_sim_lib Threads::Threads)
+target_compile_definitions(atlas_sim PRIVATE
+  ATLAS_VIEWER_TEMPLATE="${CMAKE_CURRENT_SOURCE_DIR}/viewer/viewer_template.html")
+
+file(GLOB ATLAS_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
+add_executable(atlas_tests ${ATLAS_TEST_SOURCES})
+target_include_directories(atlas_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+target_link_libraries(atlas_tests PRIVATE atlas_sim_lib)
+target_compile_options(atlas_tests PRIVATE -Wall -Wextra)
+
+add_test(NAME unit_tests COMMAND atlas_tests)
+add_test(NAME simulation_quick COMMAND atlas_sim --quick --out ${CMAKE_BINARY_DIR}/simulation_quick)
+
+add_custom_target(simulate
+  COMMAND atlas_sim --out ${CMAKE_SOURCE_DIR}/simulation_output
+  DEPENDS atlas_sim
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Simulando todas las pistas" USES_TERMINAL)
