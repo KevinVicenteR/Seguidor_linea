@@ -51,7 +51,7 @@ Con turbina, 10 variantes por modelo de robot: 0 fallas en 90 intentos; reconoci
 **Turbina:** solo gira con **GO** (rampa de 0.25 s a PWM 200) y se apaga **en cuanto se quita GO**; READY ya no la enciende (`impeller.spinWithReady = false`). Conéctala a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
 
 **Con turbina el robot queda pegado a la pista** y los motores necesitan más fuerza para moverse (con PWM 60 casi no avanzaba). Por eso:
-- **Impulso de arranque:** los primeros 0.2 s sale con PWM 130 y luego baja a la velocidad elegida (`speed.startKickPwm`, `startKickMs`).
+- **Arranque firme:** los primeros 0.2 s sale con PWM 100 aunque la velocidad elegida sea menor (`speed.startKickPwm`, `startKickMs`).
 - **Compensación de zona muerta:** cualquier PWM distinto de cero empieza en 52 y escala hasta 255 (`control.minMotorPwm`), así PWM 60 sí avanza.
 
 En simulación, con la succión frenando los motores: pista de práctica y de competencia con 0 fallas en los intentos con mapa; reconocimiento a PWM 60 de la pista de práctica con 1 falla en 30 (robot "real").

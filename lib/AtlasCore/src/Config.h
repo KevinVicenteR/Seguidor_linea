@@ -76,7 +76,7 @@ struct SpeedConfig {
   uint16_t stopBrakeMs = 500;  // rampa de frenado al quitar GO
   // Impulso de arranque: con la turbina el robot queda pegado a la pista y
   // necesita más fuerza para empezar a moverse.
-  int16_t startKickPwm = 130;
+  int16_t startKickPwm = 100;
   uint16_t startKickMs = 200;
 };
 
