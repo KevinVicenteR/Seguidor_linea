@@ -10,7 +10,7 @@ RobotConfig safeProfile() { return RobotConfig(); }
 // simulation/tools/atlas_tune_learning sobre robots nominal, moderado y real.
 RobotConfig fastProfile() {
   RobotConfig config;
-  config.control.kp = 0.005f;  // control suave: el robot real zigzagueaba
+  config.control.kp = 0.008f;  // suave pero con fuerza para curvas cerradas a alta velocidad
   config.control.kd = 1.0f;
   config.control.derivativeFilterShift = 1;
   config.control.curveSlowdownPercent = 0;  // el mapa ya decide la velocidad de cada tramo
