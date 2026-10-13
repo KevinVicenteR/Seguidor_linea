@@ -11,7 +11,7 @@ RobotConfig safeProfile() { return RobotConfig(); }
 RobotConfig fastProfile() {
   RobotConfig config;
   config.control.kp = 0.010f;
-  config.control.kd = 1.75f;
+  config.control.kd = 1.6f;  // bajada de 1.75: el robot real vibraba
   config.control.derivativeFilterShift = 1;
   config.control.curveSlowdownPercent = 0;  // el mapa ya decide la velocidad de cada tramo
   config.lostLine.outerMotorPwm = 201;
