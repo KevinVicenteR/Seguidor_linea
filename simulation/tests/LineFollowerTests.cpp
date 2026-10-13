@@ -146,6 +146,21 @@ TEST("Hueco en una recta: sigue recto y no gira") {
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, 150);
 }
 
+TEST("Punteado: tras cruzar un hueco, un trozo corto de cinta no rompe la recta") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);  // recta antes del punteado
+  rig.bus.fill(220);
+  for (uint32_t t = 1101; t <= 1140; t++) rig.follower.update(t);  // primer hueco
+  rig.bus.lineAt(7, 8);
+  for (uint32_t t = 1141; t <= 1150; t++) rig.follower.update(t);  // trozo de 10 ms
+  rig.bus.fill(220);
+  rig.follower.update(1160);                                       // segundo hueco
+  EXPECT_TRUE(rig.follower.isBridging());
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.drivetrain.rightMotor.pwm);
+}
+
 TEST("Hueco más largo que gapBridgeMs: empieza a buscar la línea") {
   Rig rig;
   rig.bus.lineAt(7, 8);

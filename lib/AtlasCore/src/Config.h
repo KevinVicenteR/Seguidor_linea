@@ -97,7 +97,10 @@ struct LostLineConfig {
   // girando. En curvas, rizos y picos la línea nunca está centrada tanto tiempo.
   uint16_t gapBridgeMs = 200;
   int16_t gapCenterTolerance = 1500;  // |error| máximo para considerarse "centrado"
-  uint16_t gapStraightMs = 60;        // tiempo centrado exigido antes del hueco
+  uint16_t gapStraightMs = 25;        // tiempo centrado exigido antes del hueco
+  // Punteado: si acaba de cruzar un hueco en recto, el siguiente trozo de
+  // cinta cuenta como recto desde que aparece (huecos encadenados).
+  uint16_t gapChainMs = 300;
 };
 
 // Frenado anticipado en esquinas: la barra (18 cm delante del eje) detecta la

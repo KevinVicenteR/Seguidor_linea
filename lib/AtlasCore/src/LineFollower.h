@@ -60,6 +60,8 @@ class LineFollower {
 
   bool isRunning() const { return running_; }
   bool isStopping() const { return stopping_; }
+  bool isBridging() const { return bridging_; }
+  bool isRecovering() const { return recovering_; }
   const MotorCommand& lastCommand() const { return command_; }
   const LineReading& lastReading() const { return reading_; }
   uint8_t gainPercent() const { return guard_.gainPercent(); }
@@ -110,6 +112,7 @@ class LineFollower {
   bool stoppedWhileLost_ = false;
   bool stoppedIncomplete_ = false;
   bool bridging_ = false;
+  bool bridgedOnce_ = false;
   bool recovering_ = false;
 
   LinearRamp velocityRamp_;
@@ -120,6 +123,7 @@ class LineFollower {
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;
+  uint32_t lastBridgeMs_ = 0;  // último instante cruzando un hueco en recto
   uint32_t centeredSinceMs_ = 0;
   uint32_t lastCornerMs_ = 0;
   bool cornerSeen_ = false;

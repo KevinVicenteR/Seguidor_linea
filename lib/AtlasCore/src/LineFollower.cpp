@@ -59,6 +59,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   centered_ = true;
   centeredSinceMs_ = nowMs - config_->lostLine.gapStraightMs;
   cornerSeen_ = false;
+  bridgedOnce_ = false;
 }
 
 void LineFollower::requestStop(uint32_t nowMs) {
@@ -97,6 +98,10 @@ void LineFollower::update(uint32_t nowMs) {
   reading_ = sensors_.readLine();
   if (reading_.isTrackable()) {
     if (recovering_) pd_.reset();  // sin tirón del derivativo al recuperar la línea
+    if (bridging_) {
+      lastBridgeMs_ = nowMs;
+      bridgedOnce_ = true;
+    }
     recovering_ = false;
     bridging_ = false;
     command_ = followLine(governor_.apply(guidedVelocity(velocity)), nowMs);
@@ -285,8 +290,13 @@ int16_t LineFollower::slowDownForCurve(int16_t velocity, int32_t error) const {
 }
 
 void LineFollower::trackStraightRun(int32_t error, uint32_t nowMs) {
+  const LostLineConfig& lost = config_->lostLine;
   const bool centered = looksStraight(error);
-  if (centered && !centered_) centeredSinceMs_ = nowMs;
+  if (centered && !centered_) {
+    // Trozo de punteado: viene de cruzar un hueco en recto, ya cuenta como recta.
+    const bool chainedGap = bridgedOnce_ && nowMs - lastBridgeMs_ <= lost.gapChainMs;
+    centeredSinceMs_ = chainedGap ? nowMs - lost.gapStraightMs : nowMs;
+  }
   centered_ = centered;
 }
 
