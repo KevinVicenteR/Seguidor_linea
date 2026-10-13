@@ -109,6 +109,7 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
         makeSpec(i, tracks[i].track.name(), 100, !isBeyondGeometry(tracks[i].track.name()), " · aprendizaje");
     learning.learnTrack = true;
     learning.attempts = 3;
+    learning.fastImpellerPwm = 200;  // como el firmware: turbina más fuerte con el mapa
     specs.push_back(learning);
   }
 

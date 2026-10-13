@@ -52,12 +52,20 @@ RobotConfig makeConfig(RobotConfig profile) {
   return profile;
 }
 
+// Vueltas 2 y 3 (con mapa): van más rápido, la turbina aprieta más para
+// tener agarre en las curvas.
+RobotConfig makeFastConfig() {
+  RobotConfig config = makeConfig(fastProfile());
+  config.impeller.pwm = 200;
+  return config;
+}
+
 //  ===========================
 //  O B J E C T   W I R I N G
 //  ===========================
 
 const RobotConfig kSafeConfig = makeConfig(safeProfile());  // 1er intento: reconocimiento
-const RobotConfig kFastConfig = makeConfig(fastProfile());  // intentos con mapa aprendido
+const RobotConfig kFastConfig = makeFastConfig();  // intentos con mapa aprendido
 
 AvrClock robotClock;
 AvrOperatorPanel panel;

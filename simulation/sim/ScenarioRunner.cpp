@@ -105,6 +105,7 @@ std::vector<ScenarioResult> ScenarioRunner::runAttempts(const TrackEntry& entry,
     c->impeller.pwm = spec.impellerPwm;
     c->sensors.lineColor = spec.lineColor;
   }
+  if (spec.fastImpellerPwm >= 0) fastConfig.impeller.pwm = spec.fastImpellerPwm;
 
   SensorModel sensorModel = sensorModel_;
   sensorModel.noiseSigma = spec.sensorNoiseSigma;

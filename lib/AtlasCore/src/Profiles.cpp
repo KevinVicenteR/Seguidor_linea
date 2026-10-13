@@ -17,7 +17,7 @@ RobotConfig fastProfile() {
   config.lostLine.outerMotorPwm = 201;
 
   config.planner.maxPwm = 255;
-  config.planner.fullTurnPwm = 180;
+  config.planner.fullTurnPwm = 215;  // con turbina 200 en las vueltas rápidas
   config.planner.straightCurvature = 26;
   config.planner.brakePwmPerBin = 5;
   config.planner.lookaheadBins = 18;

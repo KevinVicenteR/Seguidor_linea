@@ -17,6 +17,7 @@ struct ScenarioSpec {
   int16_t cruisePwm = 100;
   atlas::LineColor lineColor = atlas::LineColor::Black;  // línea negra sobre fondo blanco
   int16_t impellerPwm = 200;
+  int16_t fastImpellerPwm = -1;  // turbina en intentos con mapa (-1: igual que impellerPwm)
   double sensorNoiseSigma = 4.0;
   uint32_t seed = 1;
   bool required = true;  // si falla, la simulación termina con error
