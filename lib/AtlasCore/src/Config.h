@@ -51,8 +51,8 @@ struct SensorConfig {
 };
 
 struct ControlConfig {
-  float kp = 0.02f;
-  float kd = 1.6f;  // bajada de 2.23: el robot real vibraba
+  float kp = 0.008f;  // control suave: el robot real zigzagueaba
+  float kd = 1.0f;
   int16_t maxCorrectionPwm = 1000;
   // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
   uint8_t derivativeFilterShift = 1;
