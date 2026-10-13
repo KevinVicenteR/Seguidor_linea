@@ -5,29 +5,54 @@ namespace atlas {
 LineFollower::LineFollower(LineSensorArray& sensors, IDrivetrain& drivetrain, const RobotConfig& config)
     : sensors_(sensors),
       drivetrain_(drivetrain),
-      config_(config),
-      pd_(config.control.kp, config.control.kd, config.control.maxCorrectionPwm, config.control.derivativeFilterShift) {}
+      config_(&config),
+      pd_(config.control.kp, config.control.kd, config.control.maxCorrectionPwm, config.control.derivativeFilterShift),
+      guard_(config.adaptive),
+      governor_(config.adaptive),
+      planner_(config.planner) {}
 
-void LineFollower::start(int16_t cruisePwm, uint32_t nowMs) {
+void LineFollower::useConfig(const RobotConfig& config) {
+  if (running_) return;
+  config_ = &config;
+  const ControlConfig& control = config.control;
+  pd_.configure(control.kp, control.kd, control.maxCorrectionPwm, control.derivativeFilterShift);
+  guard_.configure(config.adaptive);
+  governor_.configure(config.adaptive);
+  planner_.configure(config.planner);
+}
+
+void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
+  mode_ = map_ == nullptr ? RunMode::Plain : mode;
+  if (mode_ == RunMode::MapGuided && !map_->isValid()) mode_ = RunMode::Mapping;
+  if (mode_ == RunMode::Mapping) map_->startRecording();
+  if (mode_ == RunMode::MapGuided) cruisePwm = config_->planner.maxPwm;  // el mapa limita cada tramo
+  distanceUnits_ = 0;
+  mappingTicks_ = 0;
+  mappingLostTicks_ = 0;
+  bridging_ = false;
+
   drivetrain_.enable();
   pd_.reset();
+  guard_.reset(nowMs);
+  governor_.reset(nowMs);
+  recovering_ = false;
   sensors_.resetTracking();
 
-  velocityRamp_.start(nowMs, config_.speed.runRampMs, 0, cruisePwm);
-  impellerRamp_.start(nowMs, config_.impeller.runRampMs, 0, config_.impeller.pwm);
+  velocityRamp_.start(nowMs, config_->speed.runRampMs, 0, cruisePwm);
+  impellerRamp_.start(nowMs, config_->impeller.runRampMs, 0, config_->impeller.pwm);
 
   running_ = true;
   stopping_ = false;
   lastOnLineMs_ = nowMs;
   // Si arranca sobre un hueco, avanza recto hasta encontrar la línea.
   centered_ = true;
-  centeredSinceMs_ = nowMs - config_.lostLine.gapStraightMs;
+  centeredSinceMs_ = nowMs - config_->lostLine.gapStraightMs;
   cornerSeen_ = false;
 }
 
 void LineFollower::requestStop(uint32_t nowMs) {
   if (!running_ || stopping_) return;
-  brakeRamp_.start(nowMs, config_.speed.stopBrakeMs, currentVelocity(nowMs), 0);
+  brakeRamp_.start(nowMs, config_->speed.stopBrakeMs, currentVelocity(nowMs), 0);
   stopping_ = true;
 }
 
@@ -43,22 +68,91 @@ void LineFollower::update(uint32_t nowMs) {
   scaleCrossingHoldToSpeed(velocity);
   reading_ = sensors_.readLine();
   if (reading_.isTrackable()) {
-    command_ = followLine(velocity, nowMs);
+    recovering_ = false;
+    bridging_ = false;
+    command_ = followLine(governor_.apply(guidedVelocity(velocity)), nowMs);
   } else if (isCrossingGap(nowMs)) {
-    command_ = bridgeGap(velocity);
+    if (!bridging_) onGapEntered();
+    bridging_ = true;
+    command_ = bridgeGap(guidedVelocity(velocity));
   } else {
+    bridging_ = false;
+    if (!recovering_) governor_.penalize(config_->adaptive.speedDropOnLoss, nowMs);
+    recovering_ = true;
     command_ = recoverLine(nowMs);
   }
   command_.left = clampWheel(command_.left);
   command_.right = clampWheel(command_.right);
   command_.impeller = impellerRamp_.valueAt(nowMs);
   apply(command_);
+  if (mode_ == RunMode::Mapping) recordCurvature();
+  trackDistance();
+}
+
+//  ---------------------------------------------------------------------------
+//  Aprendizaje de pista
+//  ---------------------------------------------------------------------------
+
+// Sin encoders: la distancia se estima integrando el PWM promedio de las
+// ruedas en el tiempo (un tramo ≈ 10 cm). Los huecos corrigen el error.
+void LineFollower::trackDistance() {
+  const int32_t average = (static_cast<int32_t>(command_.left) + command_.right) / 2;
+  if (average > 0) distanceUnits_ += static_cast<uint32_t>(average) * config_->control.loopPeriodUs / 100;
+}
+
+uint16_t LineFollower::currentBin() const {
+  const uint32_t bin = distanceUnits_ / config_->planner.binUnits;
+  return bin > 0xFFFF ? 0xFFFF : static_cast<uint16_t>(bin);
+}
+
+int16_t LineFollower::guidedVelocity(int16_t velocity) const {
+  if (mode_ != RunMode::MapGuided) return velocity;
+  const int16_t planned = planner_.speedAt(*map_, currentBin());
+  return planned < velocity ? planned : velocity;
+}
+
+// Curvatura del tramo = cuánto difieren las ruedas (0 recta, 255 giro en el
+// sitio). Mientras busca la línea se marca como curva máxima.
+void LineFollower::recordCurvature() {
+  uint8_t curvature = 0;
+  if (!recovering_) {
+    const int32_t left = command_.left < 0 ? -command_.left : command_.left;
+    const int32_t right = command_.right < 0 ? -command_.right : command_.right;
+    const int32_t difference = command_.left > command_.right ? command_.left - command_.right
+                                                              : command_.right - command_.left;
+    const int32_t scaled = left + right > 0 ? difference * 255 / (left + right) : 0;
+    curvature = static_cast<uint8_t>(scaled > 255 ? 255 : scaled);
+  }
+  if (bridging_) curvature = 0;
+  map_->recordCurvature(currentBin(), curvature, recovering_);
+  mappingTicks_++;
+  if (recovering_) mappingLostTicks_++;
+}
+
+// Al entrar a un hueco: en reconocimiento se anota; en vuelta guiada se usa
+// para corregir la distancia estimada.
+void LineFollower::onGapEntered() {
+  if (map_ == nullptr) return;
+  if (mode_ == RunMode::Mapping) {
+    map_->recordGap(currentBin());
+  } else if (mode_ == RunMode::MapGuided) {
+    const int32_t gap = map_->nearestGap(currentBin(), config_->planner.resyncWindowBins);
+    if (gap >= 0) distanceUnits_ = static_cast<uint32_t>(gap) * config_->planner.binUnits;
+  }
+}
+
+bool LineFollower::finishMapping() {
+  if (mode_ != RunMode::Mapping || map_ == nullptr) return false;
+  const uint16_t lostPerMille =
+      mappingTicks_ ? static_cast<uint16_t>(mappingLostTicks_ * 1000 / mappingTicks_) : 0;
+  map_->finishRecording(currentBin(), config_->planner.minimumBins, lostPerMille);
+  return map_->isValid();
 }
 
 // A menor velocidad el robot tarda más en atravesar un cruce: el tiempo
 // máximo manteniendo el rumbo crece en proporción inversa a la velocidad.
 void LineFollower::scaleCrossingHoldToSpeed(int16_t velocity) {
-  const SensorConfig& sensors = config_.sensors;
+  const SensorConfig& sensors = config_->sensors;
   const int32_t speed = velocity < 50 ? 50 : velocity;
   const int32_t reads = static_cast<int32_t>(sensors.maxHeldReads) * sensors.heldReadsReferencePwm / speed;
   sensors_.setHeldReadsLimit(static_cast<uint16_t>(reads > 2000 ? 2000 : reads));
@@ -75,7 +169,9 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   const int32_t error = static_cast<int32_t>(reading_.position) - kLinePositionCenter;
   trackStraightRun(error, nowMs);
   detectCorner(error, nowMs);
-  const int16_t correction = pd_.update(error);
+  if (guard_.update(error, nowMs)) governor_.penalize(config_->adaptive.speedDropOnOscillation, nowMs);
+  governor_.recover(nowMs);
+  const int16_t correction = pd_.update(error, guard_.gainPercent());
   const int16_t base = slowDownForCurve(scaleForCorner(velocity, nowMs), error);
 
   MotorCommand command;
@@ -87,7 +183,7 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
 // Señales de esquina: otra rama, grupo ancho (cruce/esquina viva), línea en
 // un extremo de la barra o error grande.
 void LineFollower::detectCorner(int32_t error, uint32_t nowMs) {
-  const CornerConfig& corner = config_.corner;
+  const CornerConfig& corner = config_->corner;
   if (!corner.enabled) return;
   const int32_t magnitude = error < 0 ? -error : error;
   const bool cornerAhead = reading_.ambiguous || reading_.otherLineLeft || reading_.otherLineRight ||
@@ -99,7 +195,7 @@ void LineFollower::detectCorner(int32_t error, uint32_t nowMs) {
 }
 
 uint8_t LineFollower::cornerSpeedPercent(uint32_t nowMs) const {
-  const CornerConfig& corner = config_.corner;
+  const CornerConfig& corner = config_->corner;
   if (!corner.enabled || !cornerSeen_) return 100;
   const uint32_t since = nowMs - lastCornerMs_;
   if (since <= corner.holdMs) return corner.speedPercent;
@@ -115,7 +211,7 @@ int16_t LineFollower::scaleForCorner(int16_t pwm, uint32_t nowMs) const {
 int16_t LineFollower::slowDownForCurve(int16_t velocity, int32_t error) const {
   const int32_t magnitude = error < 0 ? -error : error;
   const int32_t reduction =
-      static_cast<int32_t>(velocity) * config_.control.curveSlowdownPercent * magnitude / (100L * kLinePositionCenter);
+      static_cast<int32_t>(velocity) * config_->control.curveSlowdownPercent * magnitude / (100L * kLinePositionCenter);
   return static_cast<int16_t>(velocity - reduction);
 }
 
@@ -128,13 +224,13 @@ void LineFollower::trackStraightRun(int32_t error, uint32_t nowMs) {
 // Línea limpia y centrada: sin cruce/esquina, sin extremos y sin otras ramas.
 bool LineFollower::looksStraight(int32_t error) const {
   const int32_t magnitude = error < 0 ? -error : error;
-  return magnitude <= config_.lostLine.gapCenterTolerance && !reading_.ambiguous && !reading_.leftEdgeDetected &&
+  return magnitude <= config_->lostLine.gapCenterTolerance && !reading_.ambiguous && !reading_.leftEdgeDetected &&
          !reading_.rightEdgeDetected && !reading_.otherLineLeft && !reading_.otherLineRight;
 }
 
 // Hueco: la línea desapareció justo después de un tramo recto y centrado.
 bool LineFollower::isCrossingGap(uint32_t nowMs) const {
-  const LostLineConfig& lost = config_.lostLine;
+  const LostLineConfig& lost = config_->lostLine;
   const bool cameFromStraight = centered_ && lastOnLineMs_ - centeredSinceMs_ >= lost.gapStraightMs;
   return !reading_.onLine && cameFromStraight && nowMs - lastOnLineMs_ <= lost.gapBridgeMs;
 }
@@ -149,7 +245,7 @@ MotorCommand LineFollower::bridgeGap(int16_t velocity) const {
 // Gira hacia el último lado donde se vio la línea: rueda exterior al
 // máximo y rueda interior frenando en reversa durante un instante.
 MotorCommand LineFollower::recoverLine(uint32_t nowMs) const {
-  const LostLineConfig& lost = config_.lostLine;
+  const LostLineConfig& lost = config_->lostLine;
   const bool innerBraking = nowMs - lastOnLineMs_ <= lost.innerBrakeMs;
   const int16_t inner = innerBraking ? lost.innerMotorPwm : 0;
   const int16_t outer = scaleForCorner(lost.outerMotorPwm, nowMs);
@@ -173,7 +269,7 @@ void LineFollower::rememberLastSide() {
 }
 
 int16_t LineFollower::clampWheel(int16_t pwm) const {
-  return clampValue(pwm, config_.control.maxBackwardPwm, config_.control.maxForwardPwm);
+  return clampValue(pwm, config_->control.maxBackwardPwm, config_->control.maxForwardPwm);
 }
 
 void LineFollower::apply(const MotorCommand& command) {

@@ -31,3 +31,13 @@ add_custom_target(simulate
 # Optimizador de parámetros del firmware (no forma parte de ctest).
 add_executable(atlas_tune tools/atlas_tune.cpp)
 target_link_libraries(atlas_tune PRIVATE atlas_sim_lib Threads::Threads)
+
+# Banco de casos extremos (imperfecciones del robot real y del entorno).
+add_executable(atlas_extremes tools/atlas_extremes.cpp)
+target_link_libraries(atlas_extremes PRIVATE atlas_sim_lib Threads::Threads)
+target_compile_definitions(atlas_extremes PRIVATE
+  ATLAS_VIEWER_TEMPLATE="${CMAKE_CURRENT_SOURCE_DIR}/viewer/viewer_template.html")
+
+# Optimizador del perfil Rápido + planificador del aprendizaje de pista.
+add_executable(atlas_tune_learning tools/atlas_tune_learning.cpp)
+target_link_libraries(atlas_tune_learning PRIVATE atlas_sim_lib Threads::Threads)

@@ -43,12 +43,14 @@ double SimLineSensorBus::reflectance(const Vec2& point) const {
 
 uint8_t SimLineSensorBus::read(uint8_t channel) {
   clock_.advanceUs(model_.adcReadUs);
+  if (channel == model_.deadSensor) return static_cast<uint8_t>(model_.deadSensorValue);
 
   double onLine = reflectance(robot_.sensorPosition(channel, atlas::kSensorCount));
   if (trackLineColor_ == atlas::LineColor::Black) onLine = 1.0 - onLine;  // fondo blanco, línea negra
 
-  const double span = model_.lineLevel - model_.surfaceLevel;
-  const double adc = (model_.surfaceLevel + span * onLine) * gain_[channel] + offset_[channel] + noise_(random_);
+  const double span = (model_.lineLevel - model_.surfaceLevel) * model_.contrast;
+  const double adc = (model_.surfaceLevel + span * onLine) * gain_[channel] + offset_[channel] +
+                     model_.ambientOffset + noise_(random_);
   return static_cast<uint8_t>(std::max(0.0, std::min(255.0, std::round(adc))));
 }
 

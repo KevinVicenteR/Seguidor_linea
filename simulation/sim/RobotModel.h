@@ -10,6 +10,8 @@
 */
 #pragma once
 
+#include <deque>
+
 #include "Geometry.h"
 
 namespace sim {
@@ -24,6 +26,12 @@ struct RobotParams {
   double maxWheelSpeed = 3.2;  // m/s con PWM 255
   double motorTimeConstant = 0.035;
   double coastTimeConstant = 0.300;  // drivers deshabilitados
+
+  // Imperfecciones del robot real (0 / 1 = robot ideal)
+  double commandLatencyS = 0.0;  // retraso entre el comando PWM y el motor
+  double yawTimeConstant = 0.0;  // inercia de giro + deslizamiento de llantas
+  int motorDeadbandPwm = 0;      // PWM por debajo del cual la rueda no gira
+  double rightMotorGain = 1.0;   // motor derecho más débil (<1) o fuerte (>1)
 
   // Adherencia y succión
   double mass = 0.115;  // kg con batería
@@ -63,7 +71,8 @@ class RobotModel {
   const RobotParams& params() const { return params_; }
 
  private:
-  double wheelTarget(int pwm, bool enabled) const;
+  double wheelTarget(int pwm, bool enabled, double gain) const;
+  DriveInputs delayed(const DriveInputs& inputs, double dt);
 
   RobotParams params_;
   Pose pose_;
@@ -74,6 +83,7 @@ class RobotModel {
   double yawRate_ = 0.0;
   double downforce_ = 0.0;
   bool sliding_ = false;
+  std::deque<DriveInputs> commandQueue_;
 };
 
 }  // namespace sim

@@ -28,8 +28,9 @@ struct SensorConfig {
   uint8_t collectorSamples = 10;  // muestras consecutivas exigidas para mover min/max
   // Un sensor queda calibrado si vio línea y fondo con al menos esta diferencia.
   uint8_t minCalibrationSpan = 40;
-  // Sensores calibrados necesarios para aceptar la calibración.
-  uint8_t requiredCalibratedSensors = kSensorCount;
+  // Sensores calibrados necesarios para aceptar la calibración. Los dañados se
+  // reemplazan por el promedio de sus vecinos.
+  uint8_t requiredCalibratedSensors = kSensorCount - 2;
   // Con varias líneas bajo la barra (cruces, rizos) usar solo el grupo de
   // sensores más cercano a la posición anterior. false = algoritmo original.
   bool trackNearestCluster = true;
@@ -47,16 +48,16 @@ struct SensorConfig {
 };
 
 struct ControlConfig {
-  float kp = 0.09f;
-  float kd = 1.15f;
+  float kp = 0.02f;
+  float kd = 2.23f;
   int16_t maxCorrectionPwm = 1000;
   // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
-  uint8_t derivativeFilterShift = 2;
+  uint8_t derivativeFilterShift = 1;
   // Frenado en curva: con la línea en el extremo de la barra la velocidad
   // crucero se reduce este porcentaje (proporcional al error). 0 = original.
-  uint8_t curveSlowdownPercent = 8;
+  uint8_t curveSlowdownPercent = 27;
   int16_t maxForwardPwm = 255;
-  int16_t maxBackwardPwm = -210;
+  int16_t maxBackwardPwm = -134;
   uint16_t loopPeriodUs = 750;
 };
 
@@ -76,9 +77,9 @@ struct ImpellerConfig {
 };
 
 struct LostLineConfig {
-  int16_t outerMotorPwm = 255;
-  int16_t innerMotorPwm = -210;
-  uint16_t innerBrakeMs = 45;
+  int16_t outerMotorPwm = 175;
+  int16_t innerMotorPwm = -134;
+  uint16_t innerBrakeMs = 54;
   // Huecos en la línea: si se pierde la línea después de ir recto y centrado
   // (en una recta), el robot sigue recto hasta gapBridgeMs antes de buscarla
   // girando. En curvas, rizos y picos la línea nunca está centrada tanto tiempo.
@@ -90,14 +91,53 @@ struct LostLineConfig {
 // Frenado anticipado en esquinas: la barra (18 cm delante del eje) detecta la
 // esquina antes que las ruedas; se reduce la velocidad mientras dura y luego
 // se recupera en rampa. Afecta también a la velocidad de búsqueda de línea.
-// Desactivado: con el optimizador (simulation/tools/atlas_tune) no mejoró la
-// precisión frente al frenado en curva proporcional al error.
+// Activado en el perfil Seguro: el optimizador robusto lo eligió para que un
+// robot con más inercia o retraso no se pase de las esquinas.
 struct CornerConfig {
-  bool enabled = false;
-  int16_t triggerError = 3500;   // |error| que se considera esquina/curva cerrada
-  uint8_t speedPercent = 55;     // velocidad durante la esquina (% del crucero)
-  uint16_t holdMs = 40;          // se mantiene tras la última detección
-  uint16_t recoveryMs = 120;     // rampa de regreso a la velocidad crucero
+  bool enabled = true;
+  int16_t triggerError = 2000;   // |error| que se considera esquina/curva cerrada
+  uint8_t speedPercent = 74;     // velocidad durante la esquina (% del crucero)
+  uint16_t holdMs = 7;          // se mantiene tras la última detección
+  uint16_t recoveryMs = 291;     // rampa de regreso a la velocidad crucero
+};
+
+// Adaptación en marcha para robots o pistas distintos de lo esperado.
+struct AdaptiveConfig {
+  // Auto-amortiguación (OscillationGuard)
+  bool autoDamping = true;
+  int16_t oscillationAmplitude = 700;  // |error| mínimo para contar un cambio de lado
+  uint16_t oscillationWindowMs = 250;
+  uint8_t oscillationCrossings = 4;    // cambios de lado en la ventana = zigzag
+  uint8_t minGainPercent = 52;
+  uint8_t gainStepDownPercent = 10;
+  uint16_t gainRecoverMs = 80;  // +1 % de ganancia cada este tiempo estable
+
+  // Gobernador de velocidad (SpeedGovernor)
+  bool speedGovernor = true;
+  uint8_t minSpeedPercent = 60;
+  uint8_t speedDropOnLoss = 6;         // al perder la línea
+  uint8_t speedDropOnOscillation = 4;  // al detectar zigzag
+  uint16_t speedRecoverMs = 60;        // +1 % de velocidad cada este tiempo limpio
+};
+
+// Aprendizaje de pista: vuelta de reconocimiento y vueltas guiadas por mapa.
+struct PlannerConfig {
+  uint32_t binUnits = 80000;       // PWM·100 µs por tramo (≈10 cm, sin encoders)
+  int16_t maxPwm = 240;            // velocidad en rectas conocidas
+  int16_t offMapPwm = 110;         // velocidad si el robot sale del tramo mapeado
+  int16_t fullTurnPwm = 90;        // velocidad en el giro más cerrado
+  uint8_t straightCurvature = 25;  // curvatura de tramo considerada recta
+  uint8_t brakePwmPerBin = 8;      // cuánto puede frenar por tramo (anticipación)
+  uint8_t lookaheadBins = 25;      // tramos que mira hacia adelante (~2.5 m)
+  uint16_t minimumBins = 30;       // reconocimiento mínimo para aceptar el mapa (~3 m)
+  uint16_t resyncWindowBins = 25;  // corrección máxima al pasar por un hueco
+
+  // Confianza: si en el reconocimiento el robot pasó mucho tiempo buscando la
+  // línea (robot lento, con inercia o pista difícil), las vueltas guiadas
+  // reducen su velocidad en proporción.
+  uint16_t easyLostPerMille = 30;      // hasta 3 % sin línea = robot "fácil"
+  uint8_t slowdownPerLostPerMille = 1;  // -1 % de velocidad por cada ‰ extra
+  uint8_t minConfidencePercent = 70;
 };
 
 struct RobotConfig {
@@ -107,6 +147,8 @@ struct RobotConfig {
   ImpellerConfig impeller;
   LostLineConfig lostLine;
   CornerConfig corner;
+  AdaptiveConfig adaptive;
+  PlannerConfig planner;
   bool motorsEnabled = true;
 };
 

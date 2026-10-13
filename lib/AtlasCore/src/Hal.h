@@ -61,6 +61,14 @@ class IIndicators {
   virtual void setLed(Led led, bool on) = 0;
 };
 
+// Memoria no volátil (EEPROM): conserva datos al apagar.
+class IPersistentStorage {
+ public:
+  virtual ~IPersistentStorage() {}
+  virtual uint8_t read(uint16_t address) = 0;
+  virtual void write(uint16_t address, uint8_t value) = 0;
+};
+
 // Modo de diagnóstico opcional (solo existe en el hardware real).
 class IDiagnostics {
  public:

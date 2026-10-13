@@ -15,6 +15,7 @@ struct Rig {
   LineFollower follower{sensors, drivetrain, config};
 
   Rig() {
+    config.corner.enabled = false;  // cada prueba de esquinas lo activa explícitamente
     sensors.resetCalibration();
     bus.fill(30);
     sensors.collectCalibrationSamples();

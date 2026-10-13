@@ -22,6 +22,8 @@ struct ScenarioSpec {
   bool required = true;  // si falla, la simulación termina con error
   double timeLimitS = 40.0;  // la pista debe completarse antes de este tiempo
   bool customStart = false;  // salir desde startPoint en vez del INICIO de la pista
+  bool learnTrack = false;   // aprendizaje de pista: 1er intento reconoce, los demás usan el mapa
+  int attempts = 1;          // intentos seguidos (el operador regresa el robot a la salida)
   Vec2 startPoint;
   std::string label;
 };
@@ -63,7 +65,7 @@ struct ScenarioResult {
 
   std::vector<TelemetrySample> telemetry;
 
-  bool passed() const { return completed && stoppedCleanly && calibratedSensors == atlas::kSensorCount; }
+  bool passed() const { return completed && stoppedCleanly && calibratedSensors >= atlas::kSensorCount - 2; }
 };
 
 }  // namespace sim

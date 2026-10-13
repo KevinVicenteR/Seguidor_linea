@@ -66,10 +66,18 @@ void LineSensorArray::finishCalibration() {
   }
 }
 
+void LineSensorArray::restoreCalibration(const uint8_t* minValues, const uint8_t* maxValues) {
+  for (uint8_t i = 0; i < kSensorCount; i++) {
+    min_[i] = minValues[i];
+    max_[i] = maxValues[i];
+  }
+  finishCalibration();
+}
+
 uint8_t LineSensorArray::calibratedSensorCount() const {
   uint8_t count = 0;
   for (uint8_t i = 0; i < kSensorCount; i++) {
-    if (max_[i] >= min_[i] + config_.minCalibrationSpan) count++;
+    if (isSensorCalibrated(i)) count++;
   }
   return count;
 }
@@ -84,6 +92,16 @@ uint8_t LineSensorArray::scaleToCalibratedRange(uint8_t sensor, uint8_t raw) con
 void LineSensorArray::readCalibrated() {
   readRaw();
   for (uint8_t i = 0; i < kSensorCount; i++) values_[i] = scaleToCalibratedRange(i, values_[i]);
+  fillDamagedSensors();
+}
+
+// Un sensor que no se pudo calibrar (dañado o tapado) toma el promedio de
+// sus vecinos para no dejar un hueco en medio de la línea.
+void LineSensorArray::fillDamagedSensors() {
+  for (uint8_t i = 1; i + 1 < kSensorCount; i++) {
+    if (isSensorCalibrated(i) || !isSensorCalibrated(i - 1) || !isSensorCalibrated(i + 1)) continue;
+    values_[i] = static_cast<uint8_t>((static_cast<uint16_t>(values_[i - 1]) + values_[i + 1]) / 2);
+  }
 }
 
 LineReading LineSensorArray::readLine() {

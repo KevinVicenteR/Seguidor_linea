@@ -200,3 +200,149 @@ TEST("La velocidad no baja del mínimo configurado") {
   rig.panel.pressButton1(false);
   EXPECT_EQ(app.cruisePwm(), 60);
 }
+
+namespace {
+class MemoryStorage : public IPersistentStorage {
+ public:
+  uint8_t read(uint16_t address) override { return bytes[address]; }
+  void write(uint16_t address, uint8_t value) override {
+    bytes[address] = value;
+    writes++;
+  }
+  uint8_t bytes[1024];
+  int writes = 0;
+  MemoryStorage() {
+    for (uint8_t& b : bytes) b = 0xFF;  // EEPROM borrada
+  }
+};
+}  // namespace
+
+namespace {
+// Calibra la aplicación (pasada sobre fondo y línea) y la deja en Ready.
+void calibrateApp(AppRig& rig, AtlasApp& app) {
+  rig.panel.pressButton1(true);
+  app.tick();
+  rig.panel.pressButton1(false);
+  rig.bus.fill(30);
+  for (int i = 0; i < 4; i++) app.tick();
+  rig.bus.fill(220);
+  for (int i = 0; i < 4; i++) app.tick();
+  rig.panel.pressButton1(true);
+  app.tick();
+  rig.panel.pressButton1(false);
+}
+
+void runRace(AppRig& rig, AtlasApp& app, uint32_t ms) {
+  rig.bus.lineAt(7, 8);
+  rig.panel.setGo(true);
+  for (uint64_t end = rig.clock.nowUs() + ms * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+  rig.panel.setGo(false);
+  for (uint64_t end = rig.clock.nowUs() + 1200 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+}
+}  // namespace
+
+TEST("La calibración se guarda y se carga al volver a encender") {
+  MemoryStorage eeprom;
+  {
+    AppRig rig;
+    AppOptions options;
+    options.storage = &eeprom;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    EXPECT_TRUE(app.state() == AppState::WaitCalibration);  // EEPROM vacía
+    calibrateApp(rig, app);
+    EXPECT_TRUE(app.state() == AppState::Ready);
+  }
+  {
+    AppRig rig;  // "se apagó y se volvió a encender": sensores sin calibrar
+    AppOptions options;
+    options.storage = &eeprom;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    EXPECT_TRUE(app.state() == AppState::Ready);
+    EXPECT_EQ(rig.sensors.thresholds()[3], 130);
+  }
+}
+
+TEST("Aprendizaje: el 1er intento graba el mapa y el siguiente corre guiado y rápido") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  RobotConfig fast;
+  {
+    AppRig rig;
+    AppOptions options;
+    options.storage = &eeprom;
+    options.trackMap = &map;
+    options.fastConfig = &fast;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    calibrateApp(rig, app);
+    EXPECT_FALSE(app.hasTrackMap());
+    runRace(rig, app, 4000);  // reconocimiento: ~4 m a PWM 100
+    EXPECT_TRUE(app.hasTrackMap());
+    EXPECT_TRUE(map.length() >= rig.config.planner.minimumBins);
+  }
+  {
+    TrackMap reloaded;  // apagado entre intentos: el mapa sale de la EEPROM
+    AppRig rig;
+    AppOptions options;
+    options.storage = &eeprom;
+    options.trackMap = &reloaded;
+    options.fastConfig = &fast;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    EXPECT_TRUE(app.state() == AppState::Ready);
+    EXPECT_TRUE(app.hasTrackMap());
+    rig.bus.lineAt(7, 8);
+    rig.panel.setGo(true);
+    for (int i = 0; i < 400; i++) {
+      app.tick();
+      rig.clock.advanceUs(50);
+    }
+    EXPECT_TRUE(rig.follower.mode() == RunMode::MapGuided);
+  }
+}
+
+TEST("Recalibrar borra el mapa aprendido") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  AppRig rig;
+  AppOptions options;
+  options.storage = &eeprom;
+  options.trackMap = &map;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  app.begin();
+  calibrateApp(rig, app);
+  runRace(rig, app, 4000);
+  EXPECT_TRUE(app.hasTrackMap());
+  rig.panel.pressButton1(true);
+  rig.panel.pressButton2(true);
+  app.tick();
+  rig.panel.pressButton1(false);
+  rig.panel.pressButton2(false);
+  EXPECT_FALSE(app.hasTrackMap());
+  TrackMap reloaded;
+  EXPECT_FALSE(TrackMapStore(eeprom).load(reloaded));
+}
+
+TEST("Guardar la misma calibración otra vez no reescribe la EEPROM") {
+  MemoryStorage eeprom;
+  AppRig rig;
+  rig.sensors.resetCalibration();
+  rig.bus.fill(30);
+  rig.sensors.collectCalibrationSamples();
+  rig.bus.fill(220);
+  rig.sensors.collectCalibrationSamples();
+  rig.sensors.finishCalibration();
+  CalibrationStore store(eeprom);
+  store.save(rig.sensors);
+  const int firstWrites = eeprom.writes;
+  store.save(rig.sensors);
+  EXPECT_EQ(eeprom.writes, firstWrites);
+}
+
+TEST("EEPROM dañada o vacía: no carga nada") {
+  MemoryStorage eeprom;
+  AppRig rig;
+  EXPECT_FALSE(CalibrationStore(eeprom).load(rig.sensors));
+}

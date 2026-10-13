@@ -11,8 +11,12 @@
 #include "Config.h"
 #include "Hal.h"
 #include "LineSensorArray.h"
+#include "OscillationGuard.h"
 #include "PdController.h"
 #include "Ramp.h"
+#include "SpeedGovernor.h"
+#include "SpeedPlanner.h"
+#include "TrackMap.h"
 
 namespace atlas {
 
@@ -24,11 +28,22 @@ struct MotorCommand {
 
 enum class Side : uint8_t { Left, Right };
 
+// Plain: seguimiento normal. Mapping: vuelta de reconocimiento (graba el mapa).
+// MapGuided: la velocidad de cada tramo sale del mapa aprendido.
+enum class RunMode : uint8_t { Plain, Mapping, MapGuided };
+
 class LineFollower {
  public:
   LineFollower(LineSensorArray& sensors, IDrivetrain& drivetrain, const RobotConfig& config);
 
-  void start(int16_t cruisePwm, uint32_t nowMs);
+  // Cambia el perfil de manejo (Seguro / Rápido). Solo entre carreras.
+  void useConfig(const RobotConfig& config);
+  void attachTrackMap(TrackMap* map) { map_ = map; }
+  void start(int16_t cruisePwm, uint32_t nowMs, RunMode mode = RunMode::Plain);
+  // Cierra la vuelta de reconocimiento; devuelve true si el mapa quedó válido.
+  bool finishMapping();
+  RunMode mode() const { return mode_; }
+  uint16_t currentBin() const;
   void requestStop(uint32_t nowMs);
   void update(uint32_t nowMs);
 
@@ -36,6 +51,8 @@ class LineFollower {
   bool isStopping() const { return stopping_; }
   const MotorCommand& lastCommand() const { return command_; }
   const LineReading& lastReading() const { return reading_; }
+  uint8_t gainPercent() const { return guard_.gainPercent(); }
+  uint8_t speedPercent() const { return governor_.speedPercent(); }
 
  private:
   int16_t currentVelocity(uint32_t nowMs) const;
@@ -53,11 +70,25 @@ class LineFollower {
   bool looksStraight(int32_t error) const;
   int16_t clampWheel(int16_t pwm) const;
   void apply(const MotorCommand& command);
+  int16_t guidedVelocity(int16_t velocity) const;
+  void trackDistance();
+  void onGapEntered();
+  void recordCurvature();
 
   LineSensorArray& sensors_;
   IDrivetrain& drivetrain_;
-  const RobotConfig& config_;
+  const RobotConfig* config_;
   PdController pd_;
+  OscillationGuard guard_;
+  SpeedGovernor governor_;
+  SpeedPlanner planner_;
+  TrackMap* map_ = nullptr;
+  RunMode mode_ = RunMode::Plain;
+  uint32_t distanceUnits_ = 0;
+  uint32_t mappingTicks_ = 0;
+  uint32_t mappingLostTicks_ = 0;
+  bool bridging_ = false;
+  bool recovering_ = false;
 
   LinearRamp velocityRamp_;
   LinearRamp impellerRamp_;

@@ -40,7 +40,10 @@ class LineSensorArray {
   void resetCalibration();
   void collectCalibrationSamples();
   void finishCalibration();
+  // Restaura una calibración guardada (mínimos y máximos por sensor).
+  void restoreCalibration(const uint8_t* minValues, const uint8_t* maxValues);
   uint8_t calibratedSensorCount() const;
+  bool isSensorCalibrated(uint8_t sensor) const { return max_[sensor] >= min_[sensor] + config_.minCalibrationSpan; }
   bool isCalibrationValid() const { return calibratedSensorCount() >= config_.requiredCalibratedSensors; }
 
   const uint8_t* values() const { return values_; }
@@ -58,6 +61,7 @@ class LineSensorArray {
 
   void readAveraged();
   uint8_t scaleToCalibratedRange(uint8_t sensor, uint8_t raw) const;
+  void fillDamagedSensors();
   LineReading weightedReading(Cluster cluster) const;
   uint16_t clusterIntensity(Cluster cluster) const;
   Cluster nearestCluster() const;

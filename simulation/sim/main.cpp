@@ -47,6 +47,11 @@ Options parseOptions(int argc, char** argv) {
   return options;
 }
 
+// Pistas con rizos de radio menor a la distancia barra-eje (~18 cm). El perfil
+// Seguro se ajustó para la pista de competencia con robots lentos/con inercia,
+// y eso es incompatible con lazos tan cerrados.
+bool isBeyondGeometry(const std::string& name) { return name == "Trébol de lazos" || name == "Triángulo de rizos"; }
+
 ScenarioSpec makeSpec(std::size_t track, const std::string& trackName, int16_t pwm, bool required,
                       const std::string& suffix = "") {
   ScenarioSpec spec;
@@ -76,7 +81,7 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
     const std::string& name = tracks[i].track.name();
     // Lazos más cerrados que la distancia barra-eje (~18 cm): el robot no los
     // puede seguir de forma estable; se reportan pero no son obligatorios.
-    const bool beyondGeometry = name == "Trébol de lazos";
+    const bool beyondGeometry = isBeyondGeometry(name);
     for (int16_t pwm : requiredSpeeds) {
       specs.push_back(makeSpec(i, name, pwm, !beyondGeometry, beyondGeometry ? " (lazos < 18 cm)" : ""));
     }
@@ -92,6 +97,17 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
     specs.push_back(fromGap);
   }
 
+  // Competencia con 3 intentos: el 1º reconoce la pista a PWM 100 y los otros
+  // dos corren guiados por el mapa con el perfil Rápido.
+  for (std::size_t i = 0; i < tracks.size(); i++) {
+    if (tracks[i].track.name() == "Trébol de lazos") continue;
+    ScenarioSpec learning =
+        makeSpec(i, tracks[i].track.name(), 100, !isBeyondGeometry(tracks[i].track.name()), " · aprendizaje");
+    learning.learnTrack = true;
+    learning.attempts = 3;
+    specs.push_back(learning);
+  }
+
   const std::size_t star = findTrack(tracks, "Estrella de cinco puntas");
   ScenarioSpec noisy = makeSpec(star, tracks[star].track.name(), 190, true, " · ruido x3");
   noisy.sensorNoiseSigma = 12.0;
@@ -105,15 +121,20 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
   return specs;
 }
 
+// Un escenario con aprendizaje produce un resultado por intento.
 std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs) {
-  std::vector<ScenarioResult> results(specs.size());
+  std::vector<std::vector<ScenarioResult>> perSpec(specs.size());
   std::atomic<std::size_t> next{0};
   std::atomic<std::size_t> done{0};
   const ScenarioRunner runner;
 
   auto worker = [&]() {
     for (std::size_t i = next++; i < specs.size(); i = next++) {
-      results[i] = runner.run(tracks[specs[i].trackIndex], specs[i]);
+      perSpec[i] = runner.runAttempts(tracks[specs[i].trackIndex], specs[i]);
+      for (std::size_t a = 0; perSpec[i].size() > 1 && a < perSpec[i].size(); a++) {
+        perSpec[i][a].spec.label += a == 0 ? " · Intento 1 (reconocimiento)"
+                                           : " · Intento " + std::to_string(a + 1) + " (con mapa)";
+      }
       std::fprintf(stderr, "\r  simulando... %zu/%zu", ++done, specs.size());
     }
   };
@@ -123,6 +144,9 @@ std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const 
   for (unsigned t = 0; t < threads; t++) pool.emplace_back(worker);
   for (std::thread& thread : pool) thread.join();
   std::fprintf(stderr, "\n");
+
+  std::vector<ScenarioResult> results;
+  for (const std::vector<ScenarioResult>& attempts : perSpec) results.insert(results.end(), attempts.begin(), attempts.end());
   return results;
 }
 

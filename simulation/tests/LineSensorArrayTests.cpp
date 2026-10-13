@@ -154,3 +154,23 @@ TEST("Cruce: la rama que se une al grupo no desvía la posición") {
   bus.values[4] = bus.values[5] = 30;  // la rama sale por la izquierda
   EXPECT_EQ(sensors.readLine().position, kLinePositionCenter);
 }
+
+TEST("Sensor dañado: se acepta con 15 sensores y toma el promedio de sus vecinos") {
+  struct DeadSensorBus : public ILineSensorBus {
+    test::FakeSensorBus inner;
+    uint8_t read(uint8_t channel) override { return channel == 8 ? 220 : inner.read(channel); }
+  } bus;
+  SensorConfig config;
+  LineSensorArray sensors(bus, config);
+  sensors.resetCalibration();
+  bus.inner.fill(30);
+  sensors.collectCalibrationSamples();
+  bus.inner.fill(220);
+  sensors.collectCalibrationSamples();
+  sensors.finishCalibration();
+  EXPECT_EQ(sensors.calibratedSensorCount(), 15);
+  EXPECT_TRUE(sensors.isCalibrationValid());
+
+  bus.inner.lineAt(7, 9);  // la línea pasa justo sobre el sensor dañado
+  EXPECT_EQ(sensors.readLine().position, 8000);
+}

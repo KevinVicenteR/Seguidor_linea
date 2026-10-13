@@ -6,17 +6,49 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 >
 > Modo único: **línea negra sobre fondo blanco**.
 
-## Encendido y calibración
+## Uso en competencia (3 intentos)
 
-1. Conecta el impeller a la salida 2S de la batería y luego la batería principal. El LED2 parpadea al iniciar (mantén SW1/SW2 en ese momento solo si quieres el modo diagnóstico).
-2. Coloca el robot sobre la pista y presiona **SW1 o SW2**: empieza la calibración (parpadean LED0 y LED1).
-3. Pasa la barra **lentamente** de lado a lado para que los 16 sensores vean la línea negra y el fondo blanco; presiona cualquier botón para terminar.
-4. Indicación del resultado:
-   - **Calibrado:** todos los LEDs parpadean dos veces y luego **LED0 + LED1 quedan encendidos fijos**.
-   - **Incompleta:** el **LED2 parpadea rápido**; algún sensor no vio línea y fondo. Presiona un botón y repite la pasada.
-5. Ajusta la velocidad (SW2 +10, SW1 −10, base 100), activa READY (LED2 fijo = impeller listo) y luego GO.
-6. **Quitar GO** frena y detiene el robot, que vuelve a quedar listo (LED0 + LED1 fijos) **conservando la calibración y la velocidad**: puedes dar READY y GO otra vez para otra vuelta sin recalibrar.
-7. Para recalibrar sin apagar, presiona **SW1 y SW2 al mismo tiempo** mientras está listo. **RESET** o apagar borra la calibración y la velocidad.
+1. **Encender:** conecta el impeller a la salida 2S y luego la batería. El LED2 parpadea al iniciar (mantén SW1/SW2 en ese momento solo si quieres el modo diagnóstico).
+2. **Calibrar** (solo la primera vez en una pista nueva): coloca el robot sobre la pista, presiona SW1 o SW2 (parpadean LED0 y LED1), pasa la barra **lentamente** de lado a lado sobre la línea negra y presiona cualquier botón para terminar.
+   - LED0 + LED1 **fijos**: calibrado (si LED2 da 3 destellos lentos antes, hay 1–2 sensores dañados y se compensan).
+   - LED2 parpadeando rápido: calibración incompleta, repítela.
+   - La calibración **se guarda en la EEPROM**: al volver a encender, LED2 da 2 destellos y el robot queda listo sin recalibrar.
+3. **Intento 1 — reconocimiento:** deja la velocidad en **100** (la de arranque; no toques SW1/SW2), READY y GO. El robot corre con el perfil **Seguro** y aprende la pista; al quitar GO guarda el mapa (también en EEPROM). A 100 es lo más confiable: en simulación con un robot lento/con inercia falló 1 de 32 veces, contra 1–4 de 8 a velocidades mayores.
+4. **Intentos 2 y 3 — rápidos:** ahora LED0 y LED1 **parpadean alternados** (hay mapa). READY y GO: el robot cambia solo al perfil **Rápido**, acelera en las rectas y frena antes de cada curva que ya conoce. Se re-sincroniza en cada hueco de la línea.
+5. **Pista nueva:** SW1 + SW2 juntos recalibran y **borran el mapa**.
+
+Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde la salida.
+
+## Aprendizaje de pista (resultados en simulación)
+
+Sin encoders: la distancia se estima integrando el PWM en el tiempo y se corrige en cada hueco de la línea. El mapa (curvatura promedio cada ~10 cm, huecos y "confianza") se guarda en EEPROM.
+
+Pista de competencia, 10 variantes de ruido por modelo de robot:
+
+| Robot simulado | Intento 1 (reconoce, PWM 100) | Intentos 2 y 3 (mapa) | Fallas |
+|---|---|---|---|
+| Nominal | 21.4 s | **14.1 s** (−34 %) | 0/30 |
+| Moderado (más lento) | 21.5 s | **14.5 s** (−33 %) | 0/30 |
+| Real (lento + inercia + retraso) | 23.5 s | **20.8 s** (−12 %) | 0/30 |
+
+El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si su dinámica es "difícil" (robot real), las vueltas guiadas reducen la velocidad solas (`easyLostPerMille`, `slowdownPerLostPerMille`). En el reconocimiento a PWM 100, el robot "real" falló 1 de 32 veces; los demás 0.
+
+## Casos extremos
+
+`atlas_extremes` compara el firmware original del fabricante con el nuevo frente a imperfecciones reales (pista de competencia, Gran Premio, laberinto y chicanas; PWM 100, 160 y 220):
+
+| Caso | Fallas original → nuevo |
+|---|---|
+| Nominal | 10/24 → 0/24 |
+| Motores lentos / retraso de 8 ms | 4/24 → 0, 7/24 → 0 |
+| Inercia de giro alta / robot real | 11/24 → 1, 10/24 → 1 |
+| Zona muerta, motor débil, batería baja/3S, llantas sucias | 6–12/24 → 0–2 |
+| Línea gastada, luz ambiental, sensores altos | 10/24 → 0 |
+| Sin succión | 8/24 → 4/24 |
+| Sensor dañado / sensor pegado | 11/24 → 6, 12/24 → 10 |
+| **Total** | **150/384 → 27/384** |
+
+Soluciones en el firmware: **auto-amortiguación** (`OscillationGuard`: baja Kp y Kd si detecta zigzag), **gobernador de velocidad** (`SpeedGovernor`: baja la velocidad al perder la línea o zigzaguear), **perfil Seguro robusto** (optimizado contra robots nominal, lento, con inercia y con retraso), **frenado anticipado en esquinas** y **tolerancia a 1–2 sensores dañados** (se reemplazan por el promedio de sus vecinos). Lo que sigue fallando: sensores dañados cerca del centro de la barra y correr sin succión.
 
 ## Estructura
 
@@ -28,13 +60,19 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
   Hal.h                   Interfaces: IClock, ILineSensorBus, IMotor, IDrivetrain, IOperatorInput, IIndicators
   LineSensorArray         Lectura, calibración y posición de la línea (con seguimiento en cruces)
   PdController            Control proporcional-derivativo saturado
-  LineFollower            Carrera: rampas, PD, recuperación de línea, frenado
+  LineFollower            Carrera: rampas, PD, recuperación de línea, huecos, frenado, modos de mapa
+  OscillationGuard        Auto-amortiguación (reduce ganancias si hay zigzag)
+  SpeedGovernor           Baja la velocidad al perder la línea, la recupera al ir limpio
+  TrackMap, SpeedPlanner  Mapa aprendido y velocidad por tramo con anticipación
+  CalibrationStore, TrackMapStore  Calibración y mapa en EEPROM
+  Profiles                Perfiles Seguro (reconocimiento) y Rápido (con mapa)
   AtlasApp                Máquina de estados del manual (color → calibración → velocidad → READY → GO → fin)
   StatusLeds, Ramp        Utilidades
-lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, diagnóstico serial)
+lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         46 pruebas unitarias y de integración
+simulation/tests/         64 pruebas unitarias y de integración
+simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
 
@@ -48,7 +86,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 695 B de RAM (34 %) y 15.2 KB de Flash (50 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1316 B de RAM (64 %) y 22.1 KB de Flash (72 %).
 
 ## Simulador y pruebas (CMake)
 
@@ -104,7 +142,7 @@ Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corrid
 
 ### Resultados actuales
 
-63/64 escenarios aprobados; ningún obligatorio falla (velocidades obligatorias: PWM 130, 160, 190 y 220). Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
+89/97 escenarios aprobados; ningún obligatorio falla. No pasan: los rizos de Trébol y Triángulo (lazos más cerrados que el límite geométrico; el perfil Seguro prioriza la pista de competencia con robots lentos o con inercia) y la prueba intencional sin succión. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
 
 - En un barrido de 480 corridas (12 pistas × PWM 160–250 × 4 semillas de ruido) solo fallan 2 corridas del triángulo de rizos a PWM 240; el resto, incluida la pista de competencia, 0.
 - **Gran Premio sin impeller: falla a propósito** (muestra el efecto de la succión).

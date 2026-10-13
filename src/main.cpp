@@ -16,11 +16,14 @@
 #include "AvrClock.h"
 #include "AvrDiagnostics.h"
 #include "AvrDrivetrain.h"
+#include "AvrEepromStorage.h"
 #include "AvrLineSensorBus.h"
 #include "AvrOperatorPanel.h"
 #include "Config.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
+#include "Profiles.h"
+#include "TrackMap.h"
 
 using namespace atlas;
 
@@ -31,22 +34,9 @@ using namespace atlas;
 constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
-RobotConfig makeRobotConfig() {
-  RobotConfig config;
-
-  // Control PD optimizado en simulación para precisión a alta velocidad
-  // (simulation/tools/atlas_tune). Originales: kp 0.05, kd 0.35, sin filtro.
-  config.control.kp = 0.09f;
-  config.control.kd = 1.15f;
-  config.control.derivativeFilterShift = 2;  // suaviza el derivativo (0 = sin filtro)
-  config.control.curveSlowdownPercent = 8;   // frena en curva según el error
-  config.control.maxForwardPwm = 255;        // original: 200 (limitaba la velocidad a ~2.5 m/s)
-  config.control.maxBackwardPwm = -210;      // freno fuerte de la rueda interior al buscar la línea
-  config.lostLine.innerMotorPwm = -210;
-  config.lostLine.innerBrakeMs = 45;
-
-  config.sensors.trackNearestCluster = true;  // cruces oblicuos y rizos; false = algoritmo original
-
+// Ajustes comunes a los dos perfiles. Las ganancias de control de cada perfil
+// están en lib/AtlasCore/src/Profiles.cpp (Seguro y Rápido).
+void applyUserSettings(RobotConfig& config) {
   config.speed.basePwm = 100;
   config.speed.minPwm = 60;
   config.speed.maxPwm = 250;
@@ -55,25 +45,41 @@ RobotConfig makeRobotConfig() {
 
   config.impeller.pwm = 200;  // el manual recomienda no superar 215
   config.impeller.runRampMs = 250;
+}
 
-  return config;
+RobotConfig makeConfig(RobotConfig profile) {
+  applyUserSettings(profile);
+  return profile;
 }
 
 //  ===========================
 //  O B J E C T   W I R I N G
 //  ===========================
 
-const RobotConfig kConfig = makeRobotConfig();
+const RobotConfig kSafeConfig = makeConfig(safeProfile());  // 1er intento: reconocimiento
+const RobotConfig kFastConfig = makeConfig(fastProfile());  // intentos con mapa aprendido
 
 AvrClock robotClock;
 AvrOperatorPanel panel;
 AvrLineSensorBus sensorBus;
-AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kConfig.motorsEnabled);
+AvrEepromStorage eeprom;
+TrackMap trackMap;
+AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kSafeConfig.motorsEnabled);
 
-LineSensorArray sensors(sensorBus, kConfig.sensors);
-LineFollower follower(sensors, drivetrain, kConfig);
-AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kConfig);
-AtlasApp app(robotClock, panel, panel, sensors, drivetrain, follower, kConfig, &diagnostics);
+LineSensorArray sensors(sensorBus, kSafeConfig.sensors);
+LineFollower follower(sensors, drivetrain, kSafeConfig);
+AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kSafeConfig);
+
+AppOptions makeAppOptions() {
+  AppOptions options;
+  options.diagnostics = &diagnostics;
+  options.fastConfig = &kFastConfig;
+  options.storage = &eeprom;
+  options.trackMap = &trackMap;
+  return options;
+}
+
+AtlasApp app(robotClock, panel, panel, sensors, drivetrain, follower, kSafeConfig, makeAppOptions());
 
 void setup() {
   cli();

@@ -47,6 +47,12 @@ struct SensorModel {
   double noiseSigma = 4.0;     // ruido gaussiano en cuentas ADC
   double gainSpread = 0.12;    // dispersión de ganancia entre sensores
   uint32_t adcReadUs = 20;     // tiempo de conversión + multiplexor
+
+  // Casos extremos de sensores
+  double contrast = 1.0;      // 1 = cinta nueva; <1 = línea gastada o sucia
+  double ambientOffset = 0.0;  // luz ambiental que suma a todas las lecturas
+  int deadSensor = -1;         // índice de un sensor dañado (-1 = ninguno)
+  int deadSensorValue = 0;     // lectura fija del sensor dañado
 };
 
 class SimLineSensorBus : public atlas::ILineSensorBus {
