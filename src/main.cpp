@@ -35,7 +35,8 @@ RobotConfig makeRobotConfig() {
   RobotConfig config;
 
   config.control.kp = 0.05f;
-  config.control.kd = 0.35f;
+  config.control.kd = 1.2f;                // original: 0.35 (oscilaba más)
+  config.control.derivativeFilterShift = 2;  // suaviza el derivativo (0 = sin filtro)
   config.control.maxForwardPwm = 255;  // original: 200 (limitaba la velocidad a ~2.5 m/s)
   config.control.maxBackwardPwm = -120;
 

@@ -69,9 +69,64 @@ TEST("Secuencia completa: calibración, velocidad, READY, GO y paro") {
   EXPECT_TRUE(rig.drivetrain.enabled);
 
   rig.panel.setGo(false);
-  rig.tickFor(600);
-  EXPECT_TRUE(rig.app.state() == AppState::Finished);
+  rig.tickFor(1200);
+  EXPECT_TRUE(rig.app.state() == AppState::Ready);
   EXPECT_FALSE(rig.drivetrain.enabled);
+  EXPECT_EQ(rig.app.racesCompleted(), 1);
+}
+
+TEST("Quitar GO conserva la calibración: GO de nuevo arranca sin recalibrar") {
+  AppRig rig;
+  rig.app.begin();
+  rig.panel.pressButton1(true);
+  rig.app.tick();
+  rig.panel.pressButton1(false);
+  rig.bus.fill(30);
+  rig.tickFor(50);
+  rig.bus.fill(220);
+  rig.tickFor(50);
+  rig.panel.pressButton1(true);
+  rig.app.tick();
+  rig.panel.pressButton1(false);
+  const uint8_t threshold = rig.sensors.thresholds()[5];
+
+  rig.bus.lineAt(7, 8);
+  for (int race = 1; race <= 2; race++) {
+    rig.panel.setGo(true);
+    rig.tickFor(300);
+    EXPECT_TRUE(rig.app.state() == AppState::Running);
+    rig.panel.setGo(false);
+    rig.tickFor(1200);
+    EXPECT_TRUE(rig.app.state() == AppState::Ready);
+    EXPECT_EQ(rig.app.racesCompleted(), race);
+    EXPECT_TRUE(rig.panel.led(Led::Led0));  // sigue indicando "calibrado"
+    EXPECT_TRUE(rig.panel.led(Led::Led1));
+  }
+  EXPECT_EQ(rig.sensors.thresholds()[5], threshold);
+}
+
+TEST("SW1 + SW2 juntos en Ready inician una nueva calibración") {
+  AppRig rig;
+  rig.app.begin();
+  rig.panel.pressButton1(true);
+  rig.app.tick();
+  rig.panel.pressButton1(false);
+  rig.bus.fill(30);
+  rig.tickFor(50);
+  rig.bus.fill(220);
+  rig.tickFor(50);
+  rig.panel.pressButton1(true);
+  rig.app.tick();
+  rig.panel.pressButton1(false);
+  EXPECT_TRUE(rig.app.state() == AppState::Ready);
+
+  rig.panel.pressButton1(true);
+  rig.panel.pressButton2(true);
+  rig.app.tick();
+  rig.panel.pressButton1(false);
+  rig.panel.pressButton2(false);
+  EXPECT_TRUE(rig.app.state() == AppState::Calibrating);
+  EXPECT_EQ(rig.app.cruisePwm(), rig.config.speed.basePwm);  // no cambió la velocidad
 }
 
 TEST("SW1 también inicia la calibración y siempre es línea negra") {

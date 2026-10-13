@@ -5,9 +5,7 @@ namespace atlas {
 namespace {
 constexpr uint16_t kUiBlinkMs = 250;
 constexpr uint16_t kConfirmHalfPeriodMs = 250;
-constexpr uint16_t kShutdownSettleMs = 2000;
-constexpr uint16_t kStandbyFlashMs = 50;
-constexpr uint16_t kStandbyPeriodMs = 1050;
+constexpr uint16_t kStopSettleMs = 500;
 }  // namespace
 
 AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators, LineSensorArray& sensors,
@@ -50,9 +48,6 @@ void AtlasApp::tick() {
       break;
     case AppState::Running:
       run();
-      break;
-    case AppState::Finished:
-      showFinished();
       break;
   }
 }
@@ -116,9 +111,17 @@ void AtlasApp::prepareToRun() {
     startRace();
     return;
   }
+  if (recalibrationRequested()) {
+    drivetrain_.impeller().setPwm(0);
+    startCalibration();
+    return;
+  }
   updateImpellerPreSpin();
   adjustCruiseSpeed();
 }
+
+// SW1 + SW2 juntos en Ready: repetir la calibración sin presionar RESET.
+bool AtlasApp::recalibrationRequested() { return input_.button1() && input_.button2(); }
 
 void AtlasApp::updateImpellerPreSpin() {
   const uint32_t now = clock_.millis();
@@ -176,23 +179,23 @@ void AtlasApp::run() {
     follower_.requestStop(clock_.millis());
   }
 
-  if (!follower_.isRunning()) shutdown();
+  if (!follower_.isRunning()) finishRace();
 }
 
-void AtlasApp::shutdown() {
+// Detiene todo y vuelve a Ready conservando calibración y velocidad.
+void AtlasApp::finishRace() {
   drivetrain_.left().setPwm(0);
   drivetrain_.right().setPwm(0);
   drivetrain_.impeller().setPwm(0);
   drivetrain_.disable();
-  clock_.delayMs(kShutdownSettleMs);
-  finishedSinceMs_ = clock_.millis();
-  state_ = AppState::Finished;
+  clock_.delayMs(kStopSettleMs);
+
+  racesCompleted_++;
+  preSpinActive_ = false;
+  leds_.setAll(false);
+  leds_.showCalibrated();
+  state_ = AppState::Ready;
 }
 
-void AtlasApp::showFinished() {
-  const bool flash = (clock_.millis() - finishedSinceMs_) % kStandbyPeriodMs < kStandbyFlashMs;
-  leds_.set(Led::Led0, flash);
-  leds_.set(Led::Led1, flash);
-}
 
 }  // namespace atlas

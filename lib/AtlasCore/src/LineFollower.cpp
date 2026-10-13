@@ -6,7 +6,7 @@ LineFollower::LineFollower(LineSensorArray& sensors, IDrivetrain& drivetrain, co
     : sensors_(sensors),
       drivetrain_(drivetrain),
       config_(config),
-      pd_(config.control.kp, config.control.kd, config.control.maxCorrectionPwm) {}
+      pd_(config.control.kp, config.control.kd, config.control.maxCorrectionPwm, config.control.derivativeFilterShift) {}
 
 void LineFollower::start(int16_t cruisePwm, uint32_t nowMs) {
   drivetrain_.enable();

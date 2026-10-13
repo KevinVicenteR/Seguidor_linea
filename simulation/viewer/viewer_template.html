@@ -286,6 +286,8 @@ function renderMetrics(s) {
     ['Error lateral máx.', fmt(s.maxOffsetMm, 0) + ' mm'],
     ['Sin línea (recuperación)', fmt(s.lostLinePct, 1) + ' %'],
     ['Derrape', fmt(s.slidingPct, 1) + ' %'],
+    ['Oscilación (cruces/m)', fmt(s.zigzagPerMeter, 2)],
+    ['Esfuerzo de dirección', fmt(s.steeringRms, 0) + ' PWM'],
     ['Sensores calibrados', `${s.calibratedSensors}/16`],
     ['PWM crucero / impeller', `${s.pwm} / ${s.impeller}`],
   ];
