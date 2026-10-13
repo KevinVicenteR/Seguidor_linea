@@ -27,6 +27,7 @@ class SpeedPlanner {
   // % de velocidad según qué tan difícil fue el reconocimiento.
   uint8_t confidencePercent(const TrackMap& map) const;
   // Velocidad planeada para el tramo `bin` (fuera del mapa: velocidad segura).
+  // El mapa es una vuelta cerrada: cerca del final mira el inicio.
   int16_t speedAt(const TrackMap& map, uint16_t bin) const;
 
  private:

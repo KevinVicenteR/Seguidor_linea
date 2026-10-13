@@ -23,9 +23,9 @@ int16_t SpeedPlanner::speedAt(const TrackMap& map, uint16_t bin) const {
   if (!map.isValid() || bin >= map.length()) return c.offMapPwm;
 
   int32_t best = c.maxPwm;
+  // La pista es un circuito: al final de la vuelta mira el inicio de la siguiente.
   for (uint16_t ahead = 0; ahead <= c.lookaheadBins; ahead++) {
-    const uint16_t j = bin + ahead;
-    if (j >= map.length()) break;
+    const uint16_t j = static_cast<uint16_t>((bin + ahead) % map.length());
     // Velocidad que permite llegar al tramo j sin pasarse de su límite.
     const int32_t allowed =
         limitFor(map.curvature(j), map.curveSpeedPercent()) + static_cast<int32_t>(c.brakePwmPerBin) * ahead;

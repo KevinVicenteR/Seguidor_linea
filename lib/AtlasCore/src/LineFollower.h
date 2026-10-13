@@ -53,6 +53,8 @@ class LineFollower {
   uint16_t failureBin() const { return failureBin_; }
   RunMode mode() const { return mode_; }
   uint16_t currentBin() const;
+  // Tramo dentro del mapa: en vueltas seguidas vuelve a empezar desde 0.
+  uint16_t mapBin() const;
   void requestStop(uint32_t nowMs);
   void update(uint32_t nowMs);
 

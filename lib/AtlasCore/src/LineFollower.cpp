@@ -76,7 +76,7 @@ void LineFollower::noteHowRunEnded(uint32_t nowMs) {
   if (stoppedWhileLost_) {
     failureBin_ = lostStartBin_;
   } else if (stoppedIncomplete_ && longestLostMs_ <= c.failedRunLostMs) {
-    failureBin_ = currentBin();
+    failureBin_ = mapBin();
   }
 }
 
@@ -122,7 +122,7 @@ void LineFollower::trackLineLoss(uint32_t nowMs) {
   runTicks_++;
   if (!recovering_) {
     lostSinceMs_ = nowMs;
-    lostStartBin_ = currentBin();
+    lostStartBin_ = mapBin();
     return;
   }
   runLostTicks_++;
@@ -161,9 +161,14 @@ uint16_t LineFollower::currentBin() const {
   return bin > 0xFFFF ? 0xFFFF : static_cast<uint16_t>(bin);
 }
 
+uint16_t LineFollower::mapBin() const {
+  if (mode_ != RunMode::MapGuided || map_ == nullptr || map_->length() == 0) return currentBin();
+  return currentBin() % map_->length();
+}
+
 int16_t LineFollower::guidedVelocity(int16_t velocity) const {
   if (mode_ != RunMode::MapGuided) return velocity;
-  const int16_t planned = planner_.speedAt(*map_, currentBin());
+  const int16_t planned = planner_.speedAt(*map_, mapBin());
   return planned < velocity ? planned : velocity;
 }
 
@@ -192,8 +197,9 @@ void LineFollower::onGapEntered() {
   if (mode_ == RunMode::Mapping) {
     map_->recordGap(currentBin());
   } else if (mode_ == RunMode::MapGuided) {
-    const int32_t gap = map_->nearestGap(currentBin(), config_->planner.resyncWindowBins);
-    if (gap >= 0) distanceUnits_ = static_cast<uint32_t>(gap) * config_->planner.binUnits;
+    const int32_t gap = map_->nearestGap(mapBin(), config_->planner.resyncWindowBins);
+    const uint32_t lapStart = static_cast<uint32_t>(currentBin() / map_->length()) * map_->length();
+    if (gap >= 0) distanceUnits_ = (lapStart + static_cast<uint32_t>(gap)) * config_->planner.binUnits;
   }
 }
 

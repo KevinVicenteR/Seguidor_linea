@@ -157,3 +157,10 @@ TEST("RunLog: guarda las últimas 8 carreras en orden") {
   log.clear();
   EXPECT_EQ(log.count(), 0);
 }
+
+TEST("SpeedPlanner: al final de la vuelta anticipa la curva del inicio (vueltas seguidas)") {
+  PlannerConfig config;
+  SpeedPlanner planner(config);
+  const TrackMap map = straightWithCurveAt(3, 60);
+  EXPECT_EQ(planner.speedAt(map, 59), config.fullTurnPwm + config.brakePwmPerBin * 4);
+}
