@@ -14,7 +14,9 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 4. Indicación del resultado:
    - **Calibrado:** todos los LEDs parpadean dos veces y luego **LED0 + LED1 quedan encendidos fijos**.
    - **Incompleta:** el **LED2 parpadea rápido**; algún sensor no vio línea y fondo. Presiona un botón y repite la pasada.
-5. Ajusta la velocidad (SW2 +10, SW1 −10, base 100), activa READY (LED2 fijo = impeller listo) y luego GO. Quitar GO frena y detiene el robot.
+5. Ajusta la velocidad (SW2 +10, SW1 −10, base 100), activa READY (LED2 fijo = impeller listo) y luego GO.
+6. **Quitar GO** frena y detiene el robot, que vuelve a quedar listo (LED0 + LED1 fijos) **conservando la calibración y la velocidad**: puedes dar READY y GO otra vez para otra vuelta sin recalibrar.
+7. Para recalibrar sin apagar, presiona **SW1 y SW2 al mismo tiempo** mientras está listo. **RESET** o apagar borra la calibración y la velocidad.
 
 ## Estructura
 
@@ -32,7 +34,7 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         40 pruebas unitarias y de integración
+simulation/tests/         43 pruebas unitarias y de integración
 simulation/viewer/        Plantilla del visor HTML animado
 ```
 
@@ -46,7 +48,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 651 B de RAM (32 %) y 14.2 KB de Flash (46 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 657 B de RAM (32 %) y 14.1 KB de Flash (46 %).
 
 ## Simulador y pruebas (CMake)
 
@@ -96,29 +98,42 @@ Reconstruida a escala del esquema del reglamento (`competitionTrack()` en `Track
 
 | PWM | 100 | 130 | 160 | 190 | 220 | 250 |
 |---|---|---|---|---|---|---|
-| Tiempo por vuelta | 18.7 s | 14.5 s | 12.0 s | 10.6 s | 9.6 s | 9.3 s |
+| Tiempo por vuelta | 18.7 s | 14.5 s | 11.9 s | 10.4 s | 9.5 s | 9.1 s |
 
 Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corridas con distintas semillas de ruido (PWM 160–250).
 
 ### Resultados actuales
 
-50/52 escenarios aprobados. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
+51/52 escenarios aprobados; ningún obligatorio falla. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
 
-- **Trébol de lazos a PWM 160: falla.** Sus lazos de 11 cm exigen más adherencia de la que da la succión a ~2 m/s; el robot derrapa, recupera la línea por la rama equivocada y se sale. En un barrido de 480 corridas (12 pistas × PWM 160–250 × 4 semillas de ruido) falla en 2 de 40 corridas del trébol y 1 de 40 del triángulo de rizos; el resto de pistas, incluida la de competencia, 0.
+- En un barrido de 480 corridas (12 pistas × PWM 160–250 × 4 semillas de ruido) solo fallan 2 corridas del triángulo de rizos a PWM 240; el resto, incluida la pista de competencia, 0.
 - **Gran Premio sin impeller: falla a propósito** (muestra el efecto de la succión).
 
 ## Cambios respecto al firmware original
 
-1. **Bug corregido** — en `RunControl.ino` el método fuera de línea calculaba `offlineElapsedTime = currentTime - offlineElapsedTime` (se restaba a sí mismo). Debía usar `offlineStartTime`; ahora el freno de la rueda interior dura los 35 ms previstos.
-2. **Cruces oblicuos y rizos** — con varias líneas bajo la barra el promedio ponderado original se desviaba hacia la línea transversal (en simulación el robot tomaba el cruce en la estrella, el ocho y los rizos). Ahora se usa el grupo de sensores contiguos más cercano a la posición anterior y, si el grupo es más ancho que una línea o la posición salta más de un sensor por ciclo, se mantiene el rumbo. Se desactiva con `config.sensors.trackNearestCluster = false`.
-3. **Alta velocidad** — `maxForwardPwm` pasa de 200 a 255. Con 200, PWM 220 y 250 daban la misma velocidad (~2.5 m/s); con 255 el robot llega a 3.1 m/s.
-4. **Frenado en curva** — la velocidad base baja hasta un 40 % en proporción al error (`curveSlowdownPercent`; 0 = original). En el barrido de 440 corridas redujo las fallas de 6 a 3 con un costo de tiempo menor a 1 %.
-5. **Solo línea negra sobre fondo blanco** — cualquier botón inicia la calibración (`config.sensors.lineColor`).
-6. **Indicación de calibración** — al terminar se verifica que los 16 sensores hayan visto línea y fondo (`minCalibrationSpan`, `requiredCalibratedSensors`): LED0 + LED1 fijos si es válida, LED2 rápido y repetir si no.
-7. **Huecos en la línea** — si la línea desaparece justo después de un tramo recto y centrado (≥ 60 ms), el robot sigue recto hasta 200 ms antes de buscarla girando (`gapBridgeMs`, `gapStraightMs`). También permite arrancar sobre un hueco.
-8. **Picos agudos** — se recuerda de qué lado apareció otra rama de línea; al terminarse la línea en el pico el robot gira hacia esa rama.
-9. El impeller sigue su rampa aunque el robot esté fuera de la línea (antes conservaba el último valor).
-10. Sensores sin calibrar (máx ≤ mín) nunca reportan línea, en vez de producir un umbral inválido.
+1. **Menos oscilación** — Kd de 0.35 a 1.2 y filtro exponencial del derivativo (`derivativeFilterShift = 2`): el zigzag baja 55 % sin perder velocidad.
+2. **Bug corregido** — en `RunControl.ino` el método fuera de línea calculaba `offlineElapsedTime = currentTime - offlineElapsedTime` (se restaba a sí mismo). Debía usar `offlineStartTime`; ahora el freno de la rueda interior dura los 35 ms previstos.
+3. **Cruces oblicuos y rizos** — con varias líneas bajo la barra el promedio ponderado original se desviaba hacia la línea transversal (en simulación el robot tomaba el cruce en la estrella, el ocho y los rizos). Ahora se usa el grupo de sensores contiguos más cercano a la posición anterior y, si el grupo es más ancho que una línea o la posición salta más de un sensor por ciclo, se mantiene el rumbo. Se desactiva con `config.sensors.trackNearestCluster = false`.
+4. **Alta velocidad** — `maxForwardPwm` pasa de 200 a 255. Con 200, PWM 220 y 250 daban la misma velocidad (~2.5 m/s); con 255 el robot llega a 3.1 m/s.
+5. **Frenado en curva** — la velocidad base baja hasta un 40 % en proporción al error (`curveSlowdownPercent`; 0 = original). En el barrido de 440 corridas redujo las fallas de 6 a 3 con un costo de tiempo menor a 1 %.
+6. **Solo línea negra sobre fondo blanco** — cualquier botón inicia la calibración (`config.sensors.lineColor`).
+7. **Indicación de calibración** — al terminar se verifica que los 16 sensores hayan visto línea y fondo (`minCalibrationSpan`, `requiredCalibratedSensors`): LED0 + LED1 fijos si es válida, LED2 rápido y repetir si no.
+8. **Huecos en la línea** — si la línea desaparece justo después de un tramo recto y centrado (≥ 60 ms), el robot sigue recto hasta 200 ms antes de buscarla girando (`gapBridgeMs`, `gapStraightMs`). También permite arrancar sobre un hueco.
+9. **Varias carreras por calibración** — quitar GO regresa al estado listo en lugar de quedarse en espera hasta RESET; SW1 + SW2 juntos recalibran.
+10. **Picos agudos** — se recuerda de qué lado apareció otra rama de línea; al terminarse la línea en el pico el robot gira hacia esa rama.
+11. El impeller sigue su rampa aunque el robot esté fuera de la línea (antes conservaba el último valor).
+12. Sensores sin calibrar (máx ≤ mín) nunca reportan línea, en vez de producir un umbral inválido.
+
+## Oscilación
+
+El simulador mide la oscilación como **cruces de un lado a otro de la línea por metro** y el **esfuerzo de dirección** (RMS de la diferencia entre ruedas). Ajuste elegido tras barrer Kp, Kd y el filtro del derivativo:
+
+| | Kp | Kd | Filtro | Cruces/m | Esfuerzo | Error RMS |
+|---|---|---|---|---|---|---|
+| Original | 0.05 | 0.35 | — | 1.79 | 46 PWM | 13.2 mm |
+| **Actual** | 0.05 | 1.2 | 1/4 | **0.81** | 44 PWM | 13.2 mm |
+
+Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
 
 ## Limitaciones conocidas
 

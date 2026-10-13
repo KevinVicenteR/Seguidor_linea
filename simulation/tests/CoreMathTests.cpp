@@ -47,3 +47,12 @@ TEST("PdController::reset borra la memoria del error") {
   pd.reset();
   EXPECT_EQ(pd.update(500), 500);
 }
+
+TEST("PdController: el filtro suaviza un pico de ruido en el derivativo") {
+  PdController raw(0.0f, 1.0f, 1000, 0);
+  PdController filtered(0.0f, 1.0f, 1000, 2);
+  raw.update(0);
+  filtered.update(0);
+  EXPECT_EQ(raw.update(400), 400);
+  EXPECT_EQ(filtered.update(400), 100);  // 1/4 del salto
+}

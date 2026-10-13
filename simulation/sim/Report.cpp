@@ -102,6 +102,7 @@ std::string resultJson(const ScenarioResult& r) {
       << ",\"avgSpeed\":" << number(r.averageSpeed, 3) << ",\"maxSpeed\":" << number(r.maxSpeed, 3)
       << ",\"rmsOffsetMm\":" << number(r.rmsOffsetMm, 1) << ",\"maxOffsetMm\":" << number(r.maxOffsetMm, 1)
       << ",\"lostLinePct\":" << number(r.lostLinePercent, 1) << ",\"slidingPct\":" << number(r.slidingPercent, 1)
+      << ",\"zigzagPerMeter\":" << number(r.zigzagPerMeter, 2) << ",\"steeringRms\":" << number(r.steeringRmsPwm, 1)
       << ",\"calibratedSensors\":" << r.calibratedSensors
       << ",\"stoppedCleanly\":" << (r.stoppedCleanly ? "true" : "false") << "," << telemetryJson(r.telemetry) << "}";
   return out.str();

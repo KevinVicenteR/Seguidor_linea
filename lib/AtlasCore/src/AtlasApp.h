@@ -1,11 +1,14 @@
 /*
-  AtlasApp.h - Máquina de estados de la secuencia de operación del manual:
+  AtlasApp.h - Máquina de estados de la secuencia de operación:
 
-    Boot -> WaitCalibration -> Calibrating -> Ready -> Running -> Finished
-            (SW1 o SW2: línea negra)    |      (velocidad, READY, GO)
-                    ^-------------------+ calibración incompleta (LED2 rápido)
+    Boot -> WaitCalibration -> Calibrating -> Ready <-> Running
+            (SW1 o SW2: línea negra)    |      |  GO     quitar GO
+                    ^-------------------+      |
+                    calibración incompleta     +-- SW1 + SW2 juntos: recalibrar
 
-  Calibración válida: animación de confirmación y LED0 + LED1 fijos.
+  - Calibración válida: animación de confirmación y LED0 + LED1 fijos.
+  - Quitar GO frena y regresa a Ready conservando calibración y velocidad:
+    se puede volver a dar READY/GO sin recalibrar. RESET borra todo.
 
   tick() se llama continuamente desde loop(). Las animaciones cortas siguen
   siendo bloqueantes (igual que el original) a través de IClock::delayMs.
@@ -23,7 +26,7 @@
 
 namespace atlas {
 
-enum class AppState : uint8_t { Boot, WaitCalibration, Calibrating, Ready, Running, Finished };
+enum class AppState : uint8_t { Boot, WaitCalibration, Calibrating, Ready, Running };
 
 class AtlasApp {
  public:
@@ -36,6 +39,7 @@ class AtlasApp {
 
   AppState state() const { return state_; }
   int16_t cruisePwm() const { return cruisePwm_; }
+  uint16_t racesCompleted() const { return racesCompleted_; }
 
  private:
   bool anyButton() { return input_.button1() || input_.button2(); }
@@ -44,7 +48,6 @@ class AtlasApp {
   void calibrate();
   void prepareToRun();
   void run();
-  void showFinished();
 
   void startCalibration();
   void finishCalibration();
@@ -52,7 +55,8 @@ class AtlasApp {
   void updateImpellerPreSpin();
   void adjustCruiseSpeed();
   void startRace();
-  void shutdown();
+  void finishRace();
+  bool recalibrationRequested();
 
   IClock& clock_;
   IOperatorInput& input_;
@@ -69,7 +73,7 @@ class AtlasApp {
   bool preSpinActive_ = false;
   LinearRamp preSpinRamp_;
   uint32_t lastControlUs_ = 0;
-  uint32_t finishedSinceMs_ = 0;
+  uint16_t racesCompleted_ = 0;
 };
 
 }  // namespace atlas

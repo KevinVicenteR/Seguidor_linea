@@ -54,6 +54,8 @@ struct ScenarioResult {
   double maxOffsetMm = 0.0;
   double lostLinePercent = 0.0;
   double slidingPercent = 0.0;
+  double zigzagPerMeter = 0.0;   // cruces del robot de un lado a otro de la línea por metro
+  double steeringRmsPwm = 0.0;   // esfuerzo de dirección: RMS de (izquierda - derecha) / 2
   int calibratedSensors = 0;
   bool stoppedCleanly = false;
   double wallSeconds = 0.0;

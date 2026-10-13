@@ -45,8 +45,10 @@ struct SensorConfig {
 
 struct ControlConfig {
   float kp = 0.05f;
-  float kd = 0.35f;
+  float kd = 1.2f;
   int16_t maxCorrectionPwm = 1000;
+  // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
+  uint8_t derivativeFilterShift = 2;
   // Frenado en curva: con la línea en el extremo de la barra la velocidad
   // crucero se reduce este porcentaje (proporcional al error). 0 = original.
   uint8_t curveSlowdownPercent = 40;

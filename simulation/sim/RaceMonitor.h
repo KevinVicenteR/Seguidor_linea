@@ -31,6 +31,7 @@ class RaceMonitor {
   static constexpr double kStallWindowS = 3.0;
   static constexpr double kStallMinProgress = 0.05;
   static constexpr double kTelemetryPeriodS = 0.02;
+  static constexpr double kZigzagHysteresis = 0.002;  // 2 mm para no contar ruido
 
   void trackProgress(double timeS, const TrackProjection& projection);
   void checkFailures(double timeS, const TrackProjection& projection);
@@ -59,6 +60,9 @@ class RaceMonitor {
   double sumSquaredOffset_ = 0.0;
   double maxOffset_ = 0.0;
   double maxSpeed_ = 0.0;
+  double sumSquaredSteering_ = 0.0;
+  int offsetSide_ = 0;
+  long zigzags_ = 0;
   std::vector<TelemetrySample> telemetry_;
 };
 

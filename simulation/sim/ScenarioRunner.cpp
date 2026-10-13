@@ -19,6 +19,7 @@ constexpr double kPhysicsStepS = 100e-6;    // paso fijo de integración
 constexpr double kMonitorPeriodS = 1e-3;
 constexpr double kHardLimitS = 150.0;
 constexpr double kStoppedSpeed = 0.05;
+constexpr double kStopCheckDelayS = 1.5;
 
 // Une el paso del tiempo virtual con la física, el operador y el árbitro.
 class World : public TimeListener {
@@ -67,7 +68,7 @@ Pose robotPoseAt(const Track& track, const Vec2& point, const RobotParams& param
 ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& spec) const {
   const auto wallStart = std::chrono::steady_clock::now();
 
-  atlas::RobotConfig config;
+  atlas::RobotConfig config = firmware_;
   config.impeller.pwm = spec.impellerPwm;
   config.sensors.lineColor = spec.lineColor;
 
@@ -104,7 +105,13 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
   while (clock.seconds() < kHardLimitS) {
     app.tick();
     clock.advanceUs(kLoopOverheadUs);
-    if (op.hasReleasedGo() && app.state() == atlas::AppState::Finished) break;
+    if (op.hasReleasedGo() && app.racesCompleted() > 0) break;
+  }
+  // Deja que el robot termine de detenerse antes de comprobarlo.
+  const double settleUntil = clock.seconds() + kStopCheckDelayS;
+  while (clock.seconds() < settleUntil) {
+    app.tick();
+    clock.advanceUs(kLoopOverheadUs);
   }
 
   ScenarioResult result;
@@ -115,7 +122,9 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
     result.failureReason = "No terminó en " + std::to_string(static_cast<int>(spec.timeLimitS)) + " s";
   }
   result.calibratedSensors = sensors.calibratedSensorCount();
-  result.stoppedCleanly = app.state() == atlas::AppState::Finished && std::fabs(robot.speed()) < kStoppedSpeed;
+  result.stoppedCleanly = app.racesCompleted() > 0 && app.state() == atlas::AppState::Ready &&
+                          std::fabs(robot.speed()) < kStoppedSpeed;
+  if (result.completed && !result.stoppedCleanly) result.failureReason = "No se detuvo al quitar GO";
   result.wallSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - wallStart).count();
   return result;
 }
