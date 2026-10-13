@@ -17,7 +17,8 @@
   - Con memoria no volátil, la calibración y el mapa se guardan; al encender
     se cargan (LED2 da 2 destellos) y el robot queda listo sin recalibrar.
   - Quitar GO frena y regresa a Ready conservando calibración y velocidad:
-    se puede volver a dar READY/GO sin recalibrar. RESET borra todo.
+    se puede volver a dar READY/GO sin recalibrar. RESET o apagar conservan
+    calibración y mapa (EEPROM); SW1 + SW2 juntos los borran y recalibran.
 
   tick() se llama continuamente desde loop(). Las animaciones cortas siguen
   siendo bloqueantes (igual que el original) a través de IClock::delayMs.

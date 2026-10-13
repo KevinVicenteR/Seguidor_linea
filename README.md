@@ -24,6 +24,14 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 | Intento 1 (reconocimiento) | Descarta el mapa; LED2 da 4 destellos rápidos y LED0 + LED1 quedan **fijos** | Vuelve a ser de reconocimiento (considera bajar a PWM 90 con SW1) |
 | Intento 2 (con mapa) | Conserva el mapa pero baja su confianza (−40 % de velocidad en el plan) | Sale más prudente para asegurar la vuelta |
 
+**Cómo reiniciar:**
+
+| Situación | Qué hacer | Qué se conserva |
+|---|---|---|
+| El robot se salió o hizo algo raro durante la carrera | Quita **GO**: frena y queda listo. Llévalo al INICIO y da READY + GO | Calibración y mapa (el mapa se descarta solo si el reconocimiento falló) |
+| No responde a GO / se quedó trabado | Presiona **RESET** (o apágalo y préndelo) | Calibración y mapa: se cargan de la EEPROM (LED2 da 2 destellos) |
+| Quieres empezar de cero (otra pista, otra luz, el mapa salió mal) | **SW1 + SW2 juntos** estando listo: borra el mapa y recalibra | Nada: nueva calibración y el siguiente intento es de reconocimiento |
+
 Estrategia con 3 intentos: si el 1 falla, el 2 es reconocimiento y el 3 el rápido; si el 1 sale bien, su tiempo (≈21 s) ya cuenta y el 2 y el 3 buscan mejorarlo.
 
 Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde la salida.
