@@ -63,7 +63,7 @@ struct ControlConfig {
   int16_t maxBackwardPwm = -134;
   // Compensación de zona muerta: cualquier PWM distinto de cero arranca desde
   // este mínimo (con la succión los motores no giran con PWM bajos).
-  int16_t minMotorPwm = 52;
+  int16_t minMotorPwm = 40;
   uint16_t loopPeriodUs = 750;
 };
 

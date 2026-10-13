@@ -43,7 +43,7 @@ void applyUserSettings(RobotConfig& config) {
   config.speed.stepPwm = 10;
   config.speed.runRampMs = 150;
 
-  config.impeller.pwm = 200;  // el manual recomienda no superar 215
+  config.impeller.pwm = 150;  // succión reducida (máx. recomendado por el manual: 215)
   config.impeller.runRampMs = 250;
 }
 
