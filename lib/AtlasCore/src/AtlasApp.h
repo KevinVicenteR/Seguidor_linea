@@ -11,7 +11,9 @@
   - Aprendizaje de pista: sin mapa, la carrera es de reconocimiento con el
     perfil Seguro y graba la pista. Con mapa (LED0 y LED1 parpadean
     alternados), la carrera usa el perfil Rápido y la velocidad del mapa.
-    Recalibrar borra el mapa.
+    Recalibrar borra el mapa. Si el reconocimiento falla (más de 1.5 s sin
+    línea: robot fuera de la pista) el mapa se descarta (LED2 da 4 destellos rápidos); si falla una
+    carrera guiada, el siguiente intento sale más prudente.
   - Con memoria no volátil, la calibración y el mapa se guardan; al encender
     se cargan (LED2 da 2 destellos) y el robot queda listo sin recalibrar.
   - Quitar GO frena y regresa a Ready conservando calibración y velocidad:

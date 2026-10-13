@@ -89,8 +89,15 @@ void AtlasApp::forgetTrackMap() {
 }
 
 void AtlasApp::saveTrackMapIfLearned() {
-  if (!follower_.finishMapping() || storage_ == nullptr) return;
-  TrackMapStore(*storage_).save(*trackMap_);
+  const bool wasMapping = follower_.mode() == RunMode::Mapping;
+  const bool learned = follower_.finishMapping();
+  if (wasMapping && !learned) {
+    leds_.mapRejected();
+    if (storage_ != nullptr) TrackMapStore(*storage_).erase();
+    return;
+  }
+  const bool penalized = follower_.penalizeMapIfGuidedRunFailed();
+  if ((learned || penalized) && storage_ != nullptr) TrackMapStore(*storage_).save(*trackMap_);
 }
 
 void AtlasApp::startCalibration() {

@@ -346,3 +346,59 @@ TEST("EEPROM dañada o vacía: no carga nada") {
   AppRig rig;
   EXPECT_FALSE(CalibrationStore(eeprom).load(rig.sensors));
 }
+
+TEST("Reconocimiento fallido (robot fuera de la pista): no se guarda el mapa") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  AppRig rig;
+  AppOptions options;
+  options.storage = &eeprom;
+  options.trackMap = &map;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  app.begin();
+  calibrateApp(rig, app);
+
+  rig.bus.lineAt(7, 8);
+  rig.panel.setGo(true);
+  for (uint64_t end = rig.clock.nowUs() + 3000 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+  rig.bus.fill(220);  // se salió: 2 s sin ver la línea
+  for (uint64_t end = rig.clock.nowUs() + 2000 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+  rig.panel.setGo(false);
+  for (uint64_t end = rig.clock.nowUs() + 1500 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+
+  EXPECT_TRUE(app.state() == AppState::Ready);
+  EXPECT_FALSE(app.hasTrackMap());  // el siguiente intento vuelve a ser de reconocimiento
+  TrackMap reloaded;
+  EXPECT_FALSE(TrackMapStore(eeprom).load(reloaded));
+}
+
+TEST("Carrera guiada fallida: el siguiente intento sale más prudente") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  RobotConfig fast;
+  AppRig rig;
+  AppOptions options;
+  options.storage = &eeprom;
+  options.trackMap = &map;
+  options.fastConfig = &fast;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  app.begin();
+  calibrateApp(rig, app);
+  runRace(rig, app, 4000);  // reconocimiento correcto
+  EXPECT_TRUE(app.hasTrackMap());
+  const uint16_t before = map.lostPerMille();
+
+  rig.bus.lineAt(7, 8);
+  rig.panel.setGo(true);
+  for (uint64_t end = rig.clock.nowUs() + 1000 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+  rig.bus.fill(220);  // se sale en la carrera rápida
+  for (uint64_t end = rig.clock.nowUs() + 2000 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+  rig.panel.setGo(false);
+  for (uint64_t end = rig.clock.nowUs() + 1500 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
+
+  EXPECT_TRUE(app.hasTrackMap());  // el mapa se conserva...
+  EXPECT_EQ(map.lostPerMille(), before + rig.config.planner.confidencePenaltyPerMille);  // ...con menos confianza
+  TrackMap reloaded;
+  EXPECT_TRUE(TrackMapStore(eeprom).load(reloaded));
+  EXPECT_EQ(reloaded.lostPerMille(), map.lostPerMille());
+}

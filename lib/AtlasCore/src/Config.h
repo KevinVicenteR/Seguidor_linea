@@ -138,6 +138,12 @@ struct PlannerConfig {
   uint16_t easyLostPerMille = 30;      // hasta 3 % sin línea = robot "fácil"
   uint8_t slowdownPerLostPerMille = 1;  // -1 % de velocidad por cada ‰ extra
   uint8_t minConfidencePercent = 70;
+
+  // Carrera fallida: más de este tiempo seguido sin línea (en vueltas buenas
+  // la racha más larga es de ~0.2 s). Un reconocimiento fallido no guarda el
+  // mapa; una vuelta guiada fallida baja la confianza para el siguiente intento.
+  uint16_t failedRunLostMs = 1500;
+  uint16_t confidencePenaltyPerMille = 40;  // = -40 % de velocidad con la pendiente por defecto
 };
 
 struct RobotConfig {

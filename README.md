@@ -17,6 +17,15 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 4. **Intentos 2 y 3 — rápidos:** ahora LED0 y LED1 **parpadean alternados** (hay mapa). READY y GO: el robot cambia solo al perfil **Rápido**, acelera en las rectas y frena antes de cada curva que ya conoce. Se re-sincroniza en cada hueco de la línea.
 5. **Pista nueva:** SW1 + SW2 juntos recalibran y **borran el mapa**.
 
+**Si un intento falla** (el robot pasa más de 1.5 s sin encontrar la línea, es decir, se salió):
+
+| Falla en… | Qué hace el robot al quitar GO | Siguiente intento |
+|---|---|---|
+| Intento 1 (reconocimiento) | Descarta el mapa; LED2 da 4 destellos rápidos y LED0 + LED1 quedan **fijos** | Vuelve a ser de reconocimiento (considera bajar a PWM 90 con SW1) |
+| Intento 2 (con mapa) | Conserva el mapa pero baja su confianza (−40 % de velocidad en el plan) | Sale más prudente para asegurar la vuelta |
+
+Estrategia con 3 intentos: si el 1 falla, el 2 es reconocimiento y el 3 el rápido; si el 1 sale bien, su tiempo (≈21 s) ya cuenta y el 2 y el 3 buscan mejorarlo.
+
 Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde la salida.
 
 ## Aprendizaje de pista (resultados en simulación)

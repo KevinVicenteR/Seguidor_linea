@@ -41,6 +41,9 @@ class TrackMap {
   uint8_t* rawBins() { return bins_; }
   uint16_t* rawGaps() { return gaps_; }
   void restore(uint16_t length, uint8_t gapCount, uint16_t lostPerMille);
+  // Tras una vuelta guiada fallida: el mapa se trata como más difícil.
+  void penalize(uint16_t extraLostPerMille) { lostPerMille_ += extraLostPerMille; }
+  void invalidate() { valid_ = false; }
 
  private:
   uint8_t bins_[kMaxMapBins] = {};

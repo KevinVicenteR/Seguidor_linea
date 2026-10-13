@@ -42,6 +42,12 @@ class LineFollower {
   void start(int16_t cruisePwm, uint32_t nowMs, RunMode mode = RunMode::Plain);
   // Cierra la vuelta de reconocimiento; devuelve true si el mapa quedó válido.
   bool finishMapping();
+  // La carrera se considera fallida (robot fuera de la pista).
+  bool runFailed() const;
+  uint32_t longestLostMs() const { return longestLostMs_; }
+  uint16_t lostPerMille() const { return runTicks_ ? static_cast<uint16_t>(runLostTicks_ * 1000 / runTicks_) : 0; }
+  // Tras una vuelta guiada fallida baja la confianza del mapa; devuelve true si lo cambió.
+  bool penalizeMapIfGuidedRunFailed();
   RunMode mode() const { return mode_; }
   uint16_t currentBin() const;
   void requestStop(uint32_t nowMs);
@@ -74,6 +80,7 @@ class LineFollower {
   void trackDistance();
   void onGapEntered();
   void recordCurvature();
+  void trackLineLoss(uint32_t nowMs);
 
   LineSensorArray& sensors_;
   IDrivetrain& drivetrain_;
@@ -87,6 +94,10 @@ class LineFollower {
   uint32_t distanceUnits_ = 0;
   uint32_t mappingTicks_ = 0;
   uint32_t mappingLostTicks_ = 0;
+  uint32_t runTicks_ = 0;
+  uint32_t runLostTicks_ = 0;
+  uint32_t lostSinceMs_ = 0;
+  uint32_t longestLostMs_ = 0;
   bool bridging_ = false;
   bool recovering_ = false;
 

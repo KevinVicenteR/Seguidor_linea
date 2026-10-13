@@ -29,6 +29,10 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   distanceUnits_ = 0;
   mappingTicks_ = 0;
   mappingLostTicks_ = 0;
+  runTicks_ = 0;
+  runLostTicks_ = 0;
+  longestLostMs_ = 0;
+  lostSinceMs_ = nowMs;
   bridging_ = false;
 
   drivetrain_.enable();
@@ -87,6 +91,31 @@ void LineFollower::update(uint32_t nowMs) {
   apply(command_);
   if (mode_ == RunMode::Mapping) recordCurvature();
   trackDistance();
+  trackLineLoss(nowMs);
+}
+
+// Lleva la cuenta del tiempo sin línea (para saber si la carrera falló). No
+// cuenta el frenado final, cuando el robot ya se detiene.
+void LineFollower::trackLineLoss(uint32_t nowMs) {
+  if (stopping_) return;
+  runTicks_++;
+  if (!recovering_) {
+    lostSinceMs_ = nowMs;
+    return;
+  }
+  runLostTicks_++;
+  const uint32_t lostMs = nowMs - lostSinceMs_;
+  if (lostMs > longestLostMs_) longestLostMs_ = lostMs;
+}
+
+bool LineFollower::runFailed() const {
+  return longestLostMs_ > config_->planner.failedRunLostMs;
+}
+
+bool LineFollower::penalizeMapIfGuidedRunFailed() {
+  if (mode_ != RunMode::MapGuided || map_ == nullptr || !runFailed()) return false;
+  map_->penalize(config_->planner.confidencePenaltyPerMille);
+  return true;
 }
 
 //  ---------------------------------------------------------------------------
@@ -146,6 +175,7 @@ bool LineFollower::finishMapping() {
   const uint16_t lostPerMille =
       mappingTicks_ ? static_cast<uint16_t>(mappingLostTicks_ * 1000 / mappingTicks_) : 0;
   map_->finishRecording(currentBin(), config_->planner.minimumBins, lostPerMille);
+  if (runFailed()) map_->invalidate();  // reconocimiento fallido: no se guarda
   return map_->isValid();
 }
 
