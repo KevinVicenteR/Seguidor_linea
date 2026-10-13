@@ -31,6 +31,8 @@ Pista de competencia, 10 variantes de ruido por modelo de robot:
 | Moderado (más lento) | 21.5 s | **14.5 s** (−33 %) | 0/30 |
 | Real (lento + inercia + retraso) | 23.5 s | **20.8 s** (−12 %) | 0/30 |
 
+**Sin turbina** (como en las pruebas actuales) también funciona: en la pista de competencia, 0 fallas en 90 intentos y 96 reconocimientos; los intentos con mapa quedan en 14.5 s (nominal) y 20.4 s (robot real), casi igual que con turbina, porque el planificador y la confianza se adaptan solos al menor agarre.
+
 El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si su dinámica es "difícil" (robot real), las vueltas guiadas reducen la velocidad solas (`easyLostPerMille`, `slowdownPerLostPerMille`). En el reconocimiento a PWM 100, el robot "real" falló 1 de 32 veces; los demás 0.
 
 ## Casos extremos
