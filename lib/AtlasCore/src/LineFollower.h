@@ -81,6 +81,7 @@ class LineFollower {
   bool looksStraight(int32_t error) const;
   int16_t clampWheel(int16_t pwm) const;
   void apply(const MotorCommand& command);
+  int16_t compensateDeadband(int16_t pwm) const;
   int16_t guidedVelocity(int16_t velocity) const;
   void trackDistance();
   void onGapEntered();
@@ -115,6 +116,7 @@ class LineFollower {
   LinearRamp impellerRamp_;
   LinearRamp brakeRamp_;
 
+  uint32_t startMs_ = 0;
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;

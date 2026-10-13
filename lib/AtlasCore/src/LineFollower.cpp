@@ -46,7 +46,10 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   recovering_ = false;
   sensors_.resetTracking();
 
-  velocityRamp_.start(nowMs, config_->speed.runRampMs, 0, cruisePwm);
+  // Impulso de arranque y después rampa hacia la velocidad crucero.
+  startMs_ = nowMs;
+  const SpeedConfig& speed = config_->speed;
+  velocityRamp_.start(nowMs + speed.startKickMs, speed.runRampMs, speed.startKickPwm, cruisePwm);
   impellerRamp_.start(nowMs, config_->impeller.runRampMs, 0, config_->impeller.pwm);
 
   running_ = true;
@@ -62,6 +65,7 @@ void LineFollower::requestStop(uint32_t nowMs) {
   if (!running_ || stopping_) return;
   brakeRamp_.start(nowMs, config_->speed.stopBrakeMs, currentVelocity(nowMs), 0);
   stopping_ = true;
+  drivetrain_.impeller().setPwm(0);
   noteHowRunEnded(nowMs);
 }
 
@@ -108,7 +112,7 @@ void LineFollower::update(uint32_t nowMs) {
   }
   command_.left = clampWheel(command_.left);
   command_.right = clampWheel(command_.right);
-  command_.impeller = impellerRamp_.valueAt(nowMs);
+  command_.impeller = stopping_ ? 0 : impellerRamp_.valueAt(nowMs);  // la turbina se apaga con el stop
   apply(command_);
   if (mode_ == RunMode::Mapping) recordCurvature();
   trackDistance();
@@ -222,7 +226,9 @@ void LineFollower::scaleCrossingHoldToSpeed(int16_t velocity) {
 }
 
 int16_t LineFollower::currentVelocity(uint32_t nowMs) const {
-  return stopping_ ? brakeRamp_.valueAt(nowMs) : velocityRamp_.valueAt(nowMs);
+  if (stopping_) return brakeRamp_.valueAt(nowMs);
+  if (nowMs - startMs_ < config_->speed.startKickMs) return config_->speed.startKickPwm;
+  return velocityRamp_.valueAt(nowMs);
 }
 
 MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
@@ -335,9 +341,19 @@ int16_t LineFollower::clampWheel(int16_t pwm) const {
   return clampValue(pwm, config_->control.maxBackwardPwm, config_->control.maxForwardPwm);
 }
 
+// Lleva cualquier PWM distinto de cero por encima de la zona muerta del motor,
+// conservando el signo y el rango completo (255 sigue siendo 255).
+int16_t LineFollower::compensateDeadband(int16_t pwm) const {
+  const int32_t minimum = config_->control.minMotorPwm;
+  if (pwm == 0 || minimum <= 0) return pwm;
+  const int32_t magnitude = pwm < 0 ? -pwm : pwm;
+  const int32_t compensated = minimum + magnitude * (kPwmResolution - minimum) / kPwmResolution;
+  return static_cast<int16_t>(pwm < 0 ? -compensated : compensated);
+}
+
 void LineFollower::apply(const MotorCommand& command) {
-  drivetrain_.left().setPwm(command.left);
-  drivetrain_.right().setPwm(command.right);
+  drivetrain_.left().setPwm(compensateDeadband(command.left));
+  drivetrain_.right().setPwm(compensateDeadband(command.right));
   drivetrain_.impeller().setPwm(command.impeller);
 }
 

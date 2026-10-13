@@ -48,7 +48,13 @@ Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde 
 
 Con turbina, 10 variantes por modelo de robot: 0 fallas en 90 intentos; reconocimiento 13.8–15.4 s y vueltas con mapa 8.6 s (nominal) a 12.9 s (robot real). En la pista de competencia mejoró también: 13.2 s con mapa (robot real 17.7 s).
 
-**Turbina:** el firmware la usa a PWM 200 durante la carrera; con READY hace una rampa previa de 1 s (LED2 fijo cuando está lista). Solo hay que conectarla a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
+**Turbina:** solo gira con **GO** (rampa de 0.25 s a PWM 200) y se apaga **en cuanto se quita GO**; READY ya no la enciende (`impeller.spinWithReady = false`). Conéctala a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
+
+**Con turbina el robot queda pegado a la pista** y los motores necesitan más fuerza para moverse (con PWM 60 casi no avanzaba). Por eso:
+- **Impulso de arranque:** los primeros 0.2 s sale con PWM 130 y luego baja a la velocidad elegida (`speed.startKickPwm`, `startKickMs`).
+- **Compensación de zona muerta:** cualquier PWM distinto de cero empieza en 52 y escala hasta 255 (`control.minMotorPwm`), así PWM 60 sí avanza.
+
+En simulación, con la succión frenando los motores: pista de práctica y de competencia con 0 fallas en los intentos con mapa; reconocimiento a PWM 60 de la pista de práctica con 1 falla en 30 (robot "real").
 
 ## Aprendizaje de pista (resultados en simulación)
 
@@ -105,7 +111,7 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         71 pruebas unitarias y de integración
+simulation/tests/         75 pruebas unitarias y de integración
 simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
@@ -120,7 +126,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1490 B de RAM (73 %) y 26.3 KB de Flash (86 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1514 B de RAM (74 %) y 27.0 KB de Flash (88 %).
 
 ## Simulador y pruebas (CMake)
 

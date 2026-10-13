@@ -31,6 +31,9 @@ struct RobotParams {
   double commandLatencyS = 0.0;  // retraso entre el comando PWM y el motor
   double yawTimeConstant = 0.0;  // inercia de giro + deslizamiento de llantas
   int motorDeadbandPwm = 0;      // PWM por debajo del cual la rueda no gira
+  // La succión aprieta el robot contra la pista: con la turbina a tope los
+  // motores necesitan este PWM extra para empezar a mover las ruedas.
+  int suctionDeadbandPwm = 45;
   double rightMotorGain = 1.0;   // motor derecho más débil (<1) o fuerte (>1)
 
   // Adherencia y succión
@@ -72,6 +75,7 @@ class RobotModel {
 
  private:
   double wheelTarget(int pwm, bool enabled, double gain) const;
+  int effectiveDeadband() const;
   DriveInputs delayed(const DriveInputs& inputs, double dt);
 
   RobotParams params_;

@@ -15,7 +15,12 @@ struct Rig {
   LineFollower follower{sensors, drivetrain, config};
 
   Rig() {
-    config.corner.enabled = false;  // cada prueba de esquinas lo activa explícitamente
+    // Las pruebas de lógica miden el comando "puro": sin frenado en esquinas,
+    // sin impulso de arranque ni compensación de zona muerta (tienen sus pruebas).
+    config.corner.enabled = false;
+    config.speed.startKickMs = 0;
+    config.speed.startKickPwm = 0;
+    config.control.minMotorPwm = 0;
     sensors.resetCalibration();
     bus.fill(30);
     sensors.collectCalibrationSamples();
@@ -208,4 +213,40 @@ TEST("Frenado en esquinas desactivado: velocidad sin cambios") {
   rig.follower.start(200, 0);
   rig.follower.update(1000);
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+}
+
+TEST("Impulso de arranque: sale con más fuerza y luego baja a la velocidad crucero") {
+  Rig rig;
+  rig.config.speed.startKickPwm = 130;
+  rig.config.speed.startKickMs = 200;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(60, 1000);
+  rig.follower.update(1010);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 130);  // impulso aunque la crucero sea 60
+  rig.follower.update(1200 + rig.config.speed.runRampMs + 10);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 60);
+}
+
+TEST("Compensación de zona muerta: un PWM bajo sí mueve el motor y 255 sigue siendo 255") {
+  Rig rig;
+  rig.config.control.minMotorPwm = 45;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(60, 0);
+  rig.follower.update(5000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 45 + 60 * (255 - 45) / 255);
+  rig.follower.requestStop(5000);
+  rig.follower.update(5600);  // ya detenido: cero sigue siendo cero
+  EXPECT_FALSE(rig.follower.isRunning());
+}
+
+TEST("La turbina se apaga en cuanto se pide el paro") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  rig.follower.update(500);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
+  rig.follower.requestStop(500);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
+  rig.follower.update(501);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
 }

@@ -15,9 +15,14 @@ void RobotModel::place(const Pose& pose) {
 }
 
 // Velocidad de rueda en régimen para un PWM, con zona muerta del motor.
+int RobotModel::effectiveDeadband() const {
+  const double suction = params_.impellerDownforce > 0.0 ? downforce_ / params_.impellerDownforce : 0.0;
+  return params_.motorDeadbandPwm + static_cast<int>(params_.suctionDeadbandPwm * suction);
+}
+
 double RobotModel::wheelTarget(int pwm, bool enabled, double gain) const {
   if (!enabled) return 0.0;
-  const int deadband = params_.motorDeadbandPwm;
+  const int deadband = effectiveDeadband();
   const int magnitude = pwm < 0 ? -pwm : pwm;
   if (magnitude <= deadband) return 0.0;
   const double effective = 255.0 * (magnitude - deadband) / (255.0 - deadband);

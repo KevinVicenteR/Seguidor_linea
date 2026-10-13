@@ -59,14 +59,20 @@ TEST("Secuencia completa: calibración, velocidad, READY, GO y paro") {
 
   rig.panel.setReady(true);
   rig.tickFor(1100);
-  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
-  EXPECT_TRUE(rig.panel.led(Led::Led2));
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);  // la turbina no gira antes de GO
 
   rig.bus.lineAt(7, 8);  // línea negra centrada
   rig.panel.setGo(true);
   rig.tickFor(300);
   EXPECT_TRUE(rig.app.state() == AppState::Running);
   EXPECT_TRUE(rig.drivetrain.enabled);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);  // gira con GO
+
+  rig.panel.setGo(false);
+  rig.tickFor(5);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);  // se apaga en cuanto se quita GO
+  rig.panel.setGo(true);
+  rig.tickFor(300);
 
   rig.panel.setGo(false);
   rig.tickFor(1200);

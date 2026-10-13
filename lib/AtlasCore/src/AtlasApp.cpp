@@ -204,7 +204,7 @@ bool AtlasApp::recalibrationRequested() { return input_.button1() && input_.butt
 void AtlasApp::updateImpellerPreSpin() {
   const uint32_t now = clock_.millis();
 
-  if (!input_.startReady()) {
+  if (!config_.impeller.spinWithReady || !input_.startReady()) {
     preSpinActive_ = false;
     leds_.set(Led::Led2, false);
     drivetrain_.impeller().setPwm(0);

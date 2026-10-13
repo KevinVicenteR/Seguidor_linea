@@ -61,6 +61,9 @@ struct ControlConfig {
   uint8_t curveSlowdownPercent = 27;
   int16_t maxForwardPwm = 255;
   int16_t maxBackwardPwm = -134;
+  // Compensación de zona muerta: cualquier PWM distinto de cero arranca desde
+  // este mínimo (con la succión los motores no giran con PWM bajos).
+  int16_t minMotorPwm = 52;
   uint16_t loopPeriodUs = 750;
 };
 
@@ -69,14 +72,20 @@ struct SpeedConfig {
   int16_t minPwm = 60;
   int16_t maxPwm = 250;
   int16_t stepPwm = 10;
-  uint16_t runRampMs = 150;    // subida de velocidad al arrancar
+  uint16_t runRampMs = 150;    // de la velocidad de arranque a la crucero
   uint16_t stopBrakeMs = 500;  // rampa de frenado al quitar GO
+  // Impulso de arranque: con la turbina el robot queda pegado a la pista y
+  // necesita más fuerza para empezar a moverse.
+  int16_t startKickPwm = 130;
+  uint16_t startKickMs = 200;
 };
 
 struct ImpellerConfig {
   int16_t pwm = 200;
-  uint16_t startRampMs = 1000;  // rampa con la señal READY
+  uint16_t startRampMs = 1000;  // rampa con la señal READY (si spinWithReady)
   uint16_t runRampMs = 250;     // rampa al iniciar la carrera
+  // false: la turbina solo gira con GO y se apaga en cuanto se quita GO.
+  bool spinWithReady = false;
 };
 
 struct LostLineConfig {
