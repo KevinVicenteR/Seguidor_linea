@@ -13,7 +13,7 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
    - LED0 + LED1 **fijos**: calibrado (si LED2 da 3 destellos lentos antes, hay 1–2 sensores dañados y se compensan).
    - LED2 parpadeando rápido: calibración incompleta, repítela.
    - La calibración **se guarda en la EEPROM**: al volver a encender, LED2 da 2 destellos y el robot queda listo sin recalibrar.
-3. **Intento 1 — reconocimiento:** deja la velocidad en **100** (la de arranque; no toques SW1/SW2), READY y GO. El robot corre con el perfil **Seguro** y aprende la pista; al quitar GO guarda el mapa (también en EEPROM). A 100 es lo más confiable: en simulación con un robot lento/con inercia falló 1 de 32 veces, contra 1–4 de 8 a velocidades mayores.
+3. **Intento 1 — reconocimiento:** elige una velocidad baja y segura con SW1 (−10) / SW2 (+10); **la velocidad se guarda** y no hay que volver a ajustarla al encender. READY y GO: el robot corre con el perfil **Seguro** y aprende la pista; al quitar GO guarda el mapa (también en EEPROM). **Reconocer lento no hace más lentos los intentos 2 y 3**: su velocidad la decide el mapa. En simulación (pista de práctica, robot "real"), reconocer a PWM 60 tarda 22 s y los intentos con mapa siguen en ~12 s; recomendado 60–80 si a 100 se sale.
 4. **Intentos 2 y 3 — rápidos:** ahora LED0 y LED1 **parpadean alternados** (hay mapa). READY y GO: el robot cambia solo al perfil **Rápido**, acelera en las rectas y frena antes de cada curva que ya conoce. Se re-sincroniza en cada hueco de la línea.
 5. **Pista nueva:** SW1 + SW2 juntos recalibran y **borran el mapa**.
 
@@ -105,7 +105,7 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         70 pruebas unitarias y de integración
+simulation/tests/         71 pruebas unitarias y de integración
 simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
@@ -120,7 +120,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1490 B de RAM (73 %) y 26.0 KB de Flash (85 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1490 B de RAM (73 %) y 26.3 KB de Flash (86 %).
 
 ## Simulador y pruebas (CMake)
 

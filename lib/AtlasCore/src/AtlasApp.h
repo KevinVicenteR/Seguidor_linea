@@ -14,8 +14,9 @@
     Recalibrar borra el mapa. Si el reconocimiento falla (más de 1.5 s sin
     línea: robot fuera de la pista) el mapa se descarta (LED2 da 4 destellos rápidos); si falla una
     carrera guiada, el siguiente intento sale más prudente.
-  - Con memoria no volátil, la calibración y el mapa se guardan; al encender
-    se cargan (LED2 da 2 destellos) y el robot queda listo sin recalibrar.
+  - Con memoria no volátil, la calibración, el mapa y la velocidad elegida se
+    guardan; al encender se cargan (LED2 da 2 destellos) y el robot queda
+    listo sin recalibrar ni volver a ajustar la velocidad.
   - Quitar GO frena y regresa a Ready conservando calibración y velocidad:
     se puede volver a dar READY/GO sin recalibrar. RESET o apagar conservan
     calibración y mapa (EEPROM); SW1 + SW2 juntos los borran y recalibran.
@@ -33,6 +34,7 @@
 #include "LineFollower.h"
 #include "LineSensorArray.h"
 #include "RunLog.h"
+#include "SpeedSettingStore.h"
 #include "TrackMap.h"
 #include "TrackMapStore.h"
 #include "Ramp.h"
@@ -74,6 +76,8 @@ class AtlasApp {
   void run();
 
   bool loadSavedCalibration();
+  void loadSavedSpeed();
+  void saveSpeed();
   void forgetTrackMap();
   void saveTrackMapIfLearned();
   void logRace();

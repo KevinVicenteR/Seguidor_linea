@@ -412,3 +412,29 @@ TEST("Carrera guiada fallida: el siguiente intento sale más prudente") {
   EXPECT_TRUE(TrackMapStore(eeprom).load(reloaded));
   EXPECT_EQ(reloaded.curveSpeedPercent(), map.curveSpeedPercent());
 }
+
+TEST("La velocidad elegida con los botones se recuerda al volver a encender") {
+  MemoryStorage eeprom;
+  {
+    AppRig rig;
+    AppOptions options;
+    options.storage = &eeprom;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    calibrateApp(rig, app);
+    for (int i = 0; i < 4; i++) {  // baja 4 veces: 100 -> 60
+      rig.panel.pressButton1(true);
+      app.tick();
+      rig.panel.pressButton1(false);
+    }
+    EXPECT_EQ(app.cruisePwm(), 60);
+  }
+  {
+    AppRig rig;
+    AppOptions options;
+    options.storage = &eeprom;
+    AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+    app.begin();
+    EXPECT_EQ(app.cruisePwm(), 60);
+  }
+}

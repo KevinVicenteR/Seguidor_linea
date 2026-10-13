@@ -35,7 +35,20 @@ void AtlasApp::begin() {
     leds_.confirm(500, 1);
     diagnostics_->run();
   }
+  loadSavedSpeed();
   state_ = loadSavedCalibration() ? AppState::Ready : AppState::WaitCalibration;
+}
+
+// Velocidad elegida la última vez con SW1/SW2 (si está dentro del rango).
+void AtlasApp::loadSavedSpeed() {
+  if (storage_ == nullptr) return;
+  int16_t saved = 0;
+  if (!SpeedSettingStore(*storage_).load(&saved)) return;
+  if (saved >= config_.speed.minPwm && saved <= config_.speed.maxPwm) cruisePwm_ = saved;
+}
+
+void AtlasApp::saveSpeed() {
+  if (storage_ != nullptr) SpeedSettingStore(*storage_).save(cruisePwm_);
 }
 
 // Usa la última calibración guardada si existe y sigue siendo válida.
@@ -212,9 +225,11 @@ void AtlasApp::adjustCruiseSpeed() {
   if (input_.button1() && cruisePwm_ >= speed.minPwm + speed.stepPwm) {
     leds_.blink(Led::Led0, kUiBlinkMs);
     cruisePwm_ -= speed.stepPwm;
+    saveSpeed();
   } else if (input_.button2() && cruisePwm_ <= speed.maxPwm - speed.stepPwm) {
     leds_.blink(Led::Led1, kUiBlinkMs);
     cruisePwm_ += speed.stepPwm;
+    saveSpeed();
   }
 }
 
