@@ -31,7 +31,7 @@ void AtlasApp::begin() {
     leds_.confirm(500, 1);
     diagnostics_->run();
   }
-  state_ = AppState::SelectLineColor;
+  state_ = AppState::WaitCalibration;
 }
 
 void AtlasApp::tick() {
@@ -39,8 +39,8 @@ void AtlasApp::tick() {
     case AppState::Boot:
       begin();
       break;
-    case AppState::SelectLineColor:
-      selectLineColor();
+    case AppState::WaitCalibration:
+      waitCalibration();
       break;
     case AppState::Calibrating:
       calibrate();
@@ -61,13 +61,12 @@ void AtlasApp::tick() {
 //  Calibración
 //  ---------------------------------------------------------------------------
 
-void AtlasApp::selectLineColor() {
-  if (!anyButton()) return;
-  startCalibration(input_.button2() ? LineColor::Black : LineColor::White);
+// Solo se calibra línea negra sobre fondo blanco: cualquier botón inicia.
+void AtlasApp::waitCalibration() {
+  if (anyButton()) startCalibration();
 }
 
-void AtlasApp::startCalibration(LineColor color) {
-  sensors_.setLineColor(color);
+void AtlasApp::startCalibration() {
   leds_.blink(Led::Led2, kUiBlinkMs);
   sensors_.resetCalibration();
   state_ = AppState::Calibrating;
@@ -93,10 +92,20 @@ void AtlasApp::finishCalibration() {
   sensors_.finishCalibration();
   leds_.setAll(false);
   clock_.delayMs(kUiBlinkMs);
+
+  if (!sensors_.isCalibrationValid()) {
+    leds_.calibrationError();
+    state_ = AppState::WaitCalibration;
+    return;
+  }
+
   leds_.confirm(kConfirmHalfPeriodMs, 2);
+  leds_.showCalibrated();
   clock_.delayMs(kUiBlinkMs);
   state_ = AppState::Ready;
 }
+
+void AtlasApp::restoreCalibratedIndicator() { leds_.showCalibrated(); }
 
 //  ---------------------------------------------------------------------------
 //  Preparación: selección de velocidad y pre-giro del impeller con READY
@@ -135,9 +144,11 @@ void AtlasApp::adjustCruiseSpeed() {
   if (input_.button1() && cruisePwm_ >= speed.minPwm + speed.stepPwm) {
     leds_.blink(Led::Led0, kUiBlinkMs);
     cruisePwm_ -= speed.stepPwm;
+    restoreCalibratedIndicator();
   } else if (input_.button2() && cruisePwm_ <= speed.maxPwm - speed.stepPwm) {
     leds_.blink(Led::Led1, kUiBlinkMs);
     cruisePwm_ += speed.stepPwm;
+    restoreCalibratedIndicator();
   }
 }
 

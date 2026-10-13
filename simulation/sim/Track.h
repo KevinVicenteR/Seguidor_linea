@@ -23,6 +23,12 @@ struct Bounds {
   Vec2 max;
 };
 
+// Tramo sin cinta entre dos puntos del eje (en el sentido de avance).
+struct TrackGap {
+  Vec2 from;
+  Vec2 to;
+};
+
 struct TrackProjection {
   double arcLength = 0.0;
   double distance = 0.0;
@@ -34,7 +40,7 @@ class Track {
   static constexpr double kStandardLineWidth = 0.019;
 
   Track(std::string name, std::string description, std::vector<Vec2> centerline,
-        double lineWidth = kStandardLineWidth);
+        double lineWidth = kStandardLineWidth, const std::vector<TrackGap>& gaps = {});
 
   const std::string& name() const { return name_; }
   const std::string& description() const { return description_; }
@@ -49,6 +55,8 @@ class Track {
   double nearestArcLength(const Vec2& p) const;
   Pose poseAt(double arcLength) const;
   double minimumTurnRadius() const;
+  bool isPainted(std::size_t segment) const { return painted_[segment]; }
+  bool hasGaps() const;
 
  private:
   static constexpr double kGridCell = 0.03;
@@ -63,6 +71,7 @@ class Track {
 
   void computeArcLengths();
   void computeBounds();
+  void markGaps(const std::vector<TrackGap>& gaps);
   void buildGrid();
   long cellIndex(int col, int row) const;
 
@@ -70,6 +79,7 @@ class Track {
   std::string description_;
   std::vector<Vec2> points_;
   std::vector<double> arcLengths_;  // arcLengths_[i] = s al inicio del segmento i
+  std::vector<bool> painted_;       // false = segmento dentro de un hueco
   double totalLength_ = 0.0;
   double lineWidth_;
   Bounds bounds_;

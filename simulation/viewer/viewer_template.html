@@ -302,16 +302,26 @@ const chartCtx = chart.getContext('2d');
 let trackPath = null;
 let trackBounds = null;
 
+// Los huecos (painted = 0) se dejan sin dibujar.
 function prepareTrackPath() {
-  const pts = DATA.tracks[current().track].points;
+  const track = DATA.tracks[current().track];
+  const pts = track.points, painted = track.painted;
+  const count = pts.length / 2;
   trackPath = new Path2D();
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let i = 0; i < pts.length; i += 2) {
-    const x = pts[i] / 1000, y = pts[i + 1] / 1000;
-    if (i === 0) trackPath.moveTo(x, y); else trackPath.lineTo(x, y);
+  let drawing = false;
+  for (let k = 0; k <= count; k++) {
+    const i = k % count;
+    const x = pts[2 * i] / 1000, y = pts[2 * i + 1] / 1000;
     minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    const prev = (i + count - 1) % count;
+    if (!painted[prev] || !painted[i] && !drawing) { drawing = false; }
+    if (painted[prev] && (k > 0)) {
+      if (!drawing) { trackPath.moveTo(pts[2 * prev] / 1000, pts[2 * prev + 1] / 1000); drawing = true; }
+      trackPath.lineTo(x, y);
+    }
+    if (!painted[i]) drawing = false;
   }
-  trackPath.closePath();
   trackBounds = { minX, minY, maxX, maxY };
 }
 
@@ -522,7 +532,7 @@ document.addEventListener('keydown', (e) => {
 renderHeader();
 renderMatrix();
 const firstFailure = DATA.scenarios.findIndex((s) => !s.passed && s.required);
-select(Math.max(0, DATA.scenarios.findIndex((s) => s.track === DATA.tracks.length - 1 && s.pwm === 220)));
+select(Math.max(0, DATA.scenarios.findIndex((s) => s.track === 0 && s.pwm === 190)));
 if (firstFailure >= 0) state.playing = true;
 requestAnimationFrame(frame);
 </script>

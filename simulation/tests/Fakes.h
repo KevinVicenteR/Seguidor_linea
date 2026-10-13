@@ -16,8 +16,8 @@ class FakeSensorBus : public atlas::ILineSensorBus {
   void fill(uint8_t value) {
     for (uint8_t& v : values) v = value;
   }
-  // Línea (valor alto) bajo los sensores [first, last]; fondo en el resto.
-  void lineAt(int first, int last, uint8_t line = 220, uint8_t surface = 30) {
+  // Línea negra (ADC bajo) bajo los sensores [first, last]; fondo blanco en el resto.
+  void lineAt(int first, int last, uint8_t line = 30, uint8_t surface = 220) {
     fill(surface);
     for (int i = first; i <= last; i++) values[i] = line;
   }

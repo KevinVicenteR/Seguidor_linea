@@ -17,4 +17,7 @@ struct TrackEntry {
 
 std::vector<TrackEntry> buildTrackLibrary();
 
+// Centro del hueco inferior de la pista de competencia (para salir desde ahí).
+Vec2 competitionGapCenter();
+
 }  // namespace sim

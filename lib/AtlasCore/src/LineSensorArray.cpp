@@ -9,10 +9,8 @@ LineSensorArray::LineSensorArray(ILineSensorBus& bus, const SensorConfig& config
   resetCalibration();
 }
 
-void LineSensorArray::setLineColor(LineColor color) { lineColor_ = color; }
-
 void LineSensorArray::readRaw() {
-  const bool invert = lineColor_ == LineColor::Black;
+  const bool invert = config_.lineColor == LineColor::Black;
   for (uint8_t i = 0; i < kSensorCount; i++) {
     const uint8_t adc = bus_.read(i);
     values_[i] = invert ? kAdcMax - adc : adc;
@@ -67,6 +65,14 @@ void LineSensorArray::finishCalibration() {
   }
 }
 
+uint8_t LineSensorArray::calibratedSensorCount() const {
+  uint8_t count = 0;
+  for (uint8_t i = 0; i < kSensorCount; i++) {
+    if (max_[i] >= min_[i] + config_.minCalibrationSpan) count++;
+  }
+  return count;
+}
+
 uint8_t LineSensorArray::scaleToCalibratedRange(uint8_t sensor, uint8_t raw) const {
   if (raw <= threshold_[sensor]) return 0;
   if (raw >= max_[sensor]) return kAdcMax;
@@ -86,6 +92,11 @@ LineReading LineSensorArray::readLine() {
 
   const Cluster cluster = nearestCluster();
   LineReading reading = weightedReading(cluster);
+  for (uint8_t i = 0; i < kSensorCount; i++) {
+    if (values_[i] == 0) continue;
+    if (i < cluster.first) reading.otherLineLeft = true;
+    if (i > cluster.last) reading.otherLineRight = true;
+  }
   if (!reading.onLine) {
     wasOnLine_ = false;
     heldReads_ = 0;
@@ -95,6 +106,7 @@ LineReading LineSensorArray::readLine() {
   // En un cruce se mantiene la última posición: el robot sigue recto.
   if (isAmbiguous(cluster, reading.position) && heldReads_ < config_.maxHeldReads) {
     reading.position = lastPosition_;
+    reading.ambiguous = true;
     heldReads_++;
   } else {
     lastPosition_ = reading.position;

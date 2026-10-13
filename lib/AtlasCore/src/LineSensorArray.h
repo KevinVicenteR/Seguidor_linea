@@ -16,6 +16,9 @@ struct LineReading {
   uint16_t position = 0;
   bool leftEdgeDetected = false;   // sensores 0-1 ven la línea
   bool rightEdgeDetected = false;  // sensores 14-15 ven la línea
+  bool ambiguous = false;          // cruce/esquina: se mantuvo la posición anterior
+  bool otherLineLeft = false;      // hay otra línea a la izquierda del grupo seguido
+  bool otherLineRight = false;     // ... o a la derecha (ramas de picos y cruces)
 
   // Posición válida para el PD: la línea está dentro de la barra y no
   // saturada en un extremo (en el extremo ya no se puede estimar el error).
@@ -26,8 +29,7 @@ class LineSensorArray {
  public:
   LineSensorArray(ILineSensorBus& bus, const SensorConfig& config);
 
-  void setLineColor(LineColor color);
-  LineColor lineColor() const { return lineColor_; }
+  LineColor lineColor() const { return config_.lineColor; }
 
   void readRaw();
   void readCalibrated();
@@ -37,6 +39,8 @@ class LineSensorArray {
   void resetCalibration();
   void collectCalibrationSamples();
   void finishCalibration();
+  uint8_t calibratedSensorCount() const;
+  bool isCalibrationValid() const { return calibratedSensorCount() >= config_.requiredCalibratedSensors; }
 
   const uint8_t* values() const { return values_; }
   const uint8_t* minValues() const { return min_; }
@@ -59,7 +63,6 @@ class LineSensorArray {
 
   ILineSensorBus& bus_;
   const SensorConfig& config_;
-  LineColor lineColor_ = LineColor::White;
 
   uint8_t values_[kSensorCount] = {};
   uint8_t min_[kSensorCount] = {};

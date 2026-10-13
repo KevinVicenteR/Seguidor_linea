@@ -164,10 +164,57 @@ TrackEntry grandPrix() {
                    {2.0, -1.2});
 }
 
+// Pista oficial de la competencia (trovicel blanco 3.66 x 2.44 m, cinta negra
+// de 2 cm). Reconstruida del esquema del reglamento: un solo circuito con
+// simetría de 180°, dos INICIO, dos huecos de ~9 cm y dos picos agudos.
+// Coordenadas en píxeles del esquema ampliado (995 px = 3.66 m).
+TrackEntry competitionTrack() {
+  constexpr double kMetersPerPixel = 3.66 / 995.0;
+  constexpr double kBoardBottomPx = 678.0;
+  constexpr double kSymmetryX = 1025.0;  // centro de simetría (512.5, 353) x2
+  constexpr double kSymmetryY = 706.0;
+
+  struct PixelCorner {
+    double x;
+    double y;
+    double radius;
+  };
+  // Mitad del circuito: del INICIO superior al INICIO inferior.
+  const PixelCorner half[] = {
+      {40, 58, 30},   {40, 135, 25},  {340, 340, 40}, {300, 428, 40}, {40, 285, 35},  {40, 470, 35},
+      {382, 470, 25}, {382, 357, 40}, {475, 357, 40}, {475, 525, 40}, {40, 525, 35},  {40, 648, 35},
+      {628, 648, 30}, {628, 585, 20}, {558, 528, 0},  {558, 408, 0},  {715, 512, 40}, {718, 648, 35},
+  };
+
+  auto toMeters = [&](double x, double y) { return Vec2{x * kMetersPerPixel, (kBoardBottomPx - y) * kMetersPerPixel}; };
+
+  FilletedLoopBuilder b;
+  for (int pass = 0; pass < 2; pass++) {
+    for (const PixelCorner& c : half) {
+      const double x = pass == 0 ? c.x : kSymmetryX - c.x;
+      const double y = pass == 0 ? c.y : kSymmetryY - c.y;
+      const Vec2 p = toMeters(x, y);
+      b.corner(p.x, p.y, c.radius * kMetersPerPixel);
+    }
+  }
+
+  const std::vector<TrackGap> gaps = {
+      {toMeters(325, 648), toMeters(350, 648)},
+      {toMeters(kSymmetryX - 325, kSymmetryY - 648), toMeters(kSymmetryX - 350, kSymmetryY - 648)},
+  };
+  Track track("Pista de competencia",
+              "Reglamento: trovicel 3.66 x 2.44 m, cinta negra de 2 cm, curvas, dos picos agudos y dos huecos de ~9 cm.",
+              b.build(), 0.020, gaps);
+  return makeEntry(std::move(track), toMeters(240, 58));
+}
+
 }  // namespace
+
+Vec2 competitionGapCenter() { return Vec2{337.5 * 3.66 / 995.0, (678.0 - 648.0) * 3.66 / 995.0}; }
 
 std::vector<TrackEntry> buildTrackLibrary() {
   std::vector<TrackEntry> library;
+  library.push_back(competitionTrack());
   library.push_back(speedOval());
   library.push_back(longChicanes());
   library.push_back(figureHexagon());

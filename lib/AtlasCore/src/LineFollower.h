@@ -40,8 +40,13 @@ class LineFollower {
  private:
   int16_t currentVelocity(uint32_t nowMs) const;
   MotorCommand followLine(int16_t velocity, uint32_t nowMs);
+  int16_t slowDownForCurve(int16_t velocity, int32_t error) const;
   MotorCommand recoverLine(uint32_t nowMs) const;
+  bool isCrossingGap(uint32_t nowMs) const;
+  MotorCommand bridgeGap(int16_t velocity) const;
   void rememberLastSide();
+  void trackStraightRun(int32_t error, uint32_t nowMs);
+  bool looksStraight(int32_t error) const;
   int16_t clampWheel(int16_t pwm) const;
   void apply(const MotorCommand& command);
 
@@ -57,6 +62,8 @@ class LineFollower {
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;
+  uint32_t centeredSinceMs_ = 0;
+  bool centered_ = false;
   Side lastSide_ = Side::Left;
 
   LineReading reading_;

@@ -46,6 +46,18 @@ class StatusLeds {
     }
   }
 
+  // LED0 y LED1 fijos: la calibración es válida y el robot espera READY/GO.
+  void showCalibrated() {
+    set(Led::Led0, true);
+    set(Led::Led1, true);
+  }
+
+  // LED2 parpadeando rápido: calibración incompleta, hay que repetirla.
+  void calibrationError() {
+    setAll(false);
+    for (uint8_t i = 0; i < 8; i++) blink(Led::Led2, 60);
+  }
+
   void bootAnimation() {
     for (uint8_t i = 0; i < 10; i++) blink(Led::Led2, 25);
   }

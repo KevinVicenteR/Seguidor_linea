@@ -2,7 +2,7 @@
   RaceOperator.h - Operador humano simulado. Ejecuta exactamente la
   secuencia del manual de ATLAS sobre el firmware real:
 
-    1. Selecciona color de línea (SW1 blanca / SW2 negra).
+    1. Presiona SW1 para iniciar la calibración (línea negra).
     2. Pasa la barra lentamente sobre la línea y termina la calibración.
     3. Coloca el robot en la salida y ajusta la velocidad con SW1/SW2.
     4. Activa READY (pre-giro del impeller) y luego GO.
@@ -18,9 +18,9 @@
 namespace sim {
 
 struct OperatorPlan {
-  atlas::LineColor lineColor = atlas::LineColor::White;
   int speedPresses = 0;  // positivo = SW2 (subir), negativo = SW1 (bajar)
-  Pose startPose;        // pose del robot con la barra centrada en la línea
+  Pose calibrationPose;  // donde se hace la pasada de calibración (sobre línea pintada)
+  Pose startPose;        // pose de salida (puede estar sobre un hueco)
   double raceTimeoutS = 90.0;
 };
 
@@ -32,7 +32,7 @@ class RaceOperator {
   bool hasReleasedGo() const { return phase_ == Phase::Done; }
 
  private:
-  enum class Phase { WaitBoot, PressColor, Sweep, PressEndCalibration, WaitConfirm, AdjustSpeed, Ready, Race, Done };
+  enum class Phase { WaitBoot, PressStartCalibration, Sweep, PressEndCalibration, WaitConfirm, AdjustSpeed, Ready, Race, Done };
 
   static constexpr double kBootS = 1.0;
   static constexpr double kPressS = 0.12;
@@ -44,7 +44,6 @@ class RaceOperator {
 
   void enter(Phase phase, double timeS);
   void holdAtLateralOffset(double offset);
-  void pressColorButton(bool pressed);
   void pressSpeedButton(bool pressed);
 
   SimOperatorPanel& panel_;

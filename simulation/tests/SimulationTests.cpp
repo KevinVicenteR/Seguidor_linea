@@ -68,3 +68,21 @@ TEST("Simulación completa: el Gran Premio a PWM 220 termina en menos de 40 s") 
   EXPECT_TRUE(result.raceTime < 40.0);
   EXPECT_EQ(result.calibratedSensors, 16);
 }
+
+TEST("Pista de competencia: completa desde el INICIO y desde el hueco en menos de 40 s") {
+  const std::vector<TrackEntry> library = buildTrackLibrary();
+  const TrackEntry& competition = library.front();
+  EXPECT_TRUE(competition.track.name() == "Pista de competencia");
+  EXPECT_TRUE(competition.track.hasGaps());
+  EXPECT_TRUE(competition.track.distanceToLine(competitionGapCenter()) > 0.02);  // sin cinta en el hueco
+
+  for (bool fromGap : {false, true}) {
+    ScenarioSpec spec;
+    spec.cruisePwm = 190;
+    spec.customStart = fromGap;
+    spec.startPoint = competitionGapCenter();
+    const ScenarioResult result = ScenarioRunner().run(competition, spec);
+    EXPECT_TRUE(result.passed());
+    EXPECT_TRUE(result.raceTime < 40.0);
+  }
+}

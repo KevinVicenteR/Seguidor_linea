@@ -13,7 +13,8 @@ constexpr double Track::kGridCell;
 constexpr double Track::kGridMargin;
 constexpr double Track::kFarDistance;
 
-Track::Track(std::string name, std::string description, std::vector<Vec2> centerline, double lineWidth)
+Track::Track(std::string name, std::string description, std::vector<Vec2> centerline, double lineWidth,
+             const std::vector<TrackGap>& gaps)
     : name_(std::move(name)),
       description_(std::move(description)),
       points_(std::move(centerline)),
@@ -21,7 +22,31 @@ Track::Track(std::string name, std::string description, std::vector<Vec2> center
   if (points_.size() < 3) throw std::invalid_argument("Una pista necesita al menos 3 puntos");
   computeArcLengths();
   computeBounds();
+  markGaps(gaps);
   buildGrid();
+}
+
+// Los sensores no ven los segmentos dentro de un hueco; el árbitro sí los usa
+// para medir el avance.
+void Track::markGaps(const std::vector<TrackGap>& gaps) {
+  painted_.assign(segmentCount(), true);
+  for (const TrackGap& gap : gaps) {
+    const double start = nearestArcLength(gap.from);
+    double length = nearestArcLength(gap.to) - start;
+    if (length < 0.0) length += totalLength_;
+    for (std::size_t i = 0; i < segmentCount(); i++) {
+      double offset = arcLengths_[i] - start;
+      if (offset < 0.0) offset += totalLength_;
+      if (offset < length) painted_[i] = false;
+    }
+  }
+}
+
+bool Track::hasGaps() const {
+  for (bool painted : painted_) {
+    if (!painted) return true;
+  }
+  return false;
 }
 
 void Track::computeArcLengths() {
@@ -55,6 +80,7 @@ void Track::buildGrid() {
   gridCells_.assign(static_cast<std::size_t>(gridCols_) * gridRows_, {});
 
   for (std::size_t i = 0; i < segmentCount(); i++) {
+    if (!painted_[i]) continue;
     const Vec2& a = segmentStart(i);
     const Vec2& b = segmentEnd(i);
     const int col0 = static_cast<int>((std::min(a.x, b.x) - kGridMargin - gridOrigin_.x) / kGridCell);

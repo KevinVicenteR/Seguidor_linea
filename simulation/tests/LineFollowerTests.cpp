@@ -73,7 +73,7 @@ TEST("Línea perdida: gira hacia el último lado con freno breve de la rueda int
   rig.bus.lineAt(1, 2);  // la línea se va por la izquierda
   rig.follower.start(150, 0);
   rig.follower.update(1000);
-  rig.bus.fill(30);
+  rig.bus.fill(220);  // sin línea: todo blanco
   rig.follower.update(1010);  // 10 ms sin línea
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.innerMotorPwm);
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.outerMotorPwm);
@@ -87,7 +87,7 @@ TEST("Línea perdida por la derecha gira a la derecha") {
   rig.bus.lineAt(13, 14);
   rig.follower.start(150, 0);
   rig.follower.update(1000);
-  rig.bus.fill(30);
+  rig.bus.fill(220);
   rig.follower.update(1005);
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.outerMotorPwm);
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.innerMotorPwm);
@@ -114,4 +114,62 @@ TEST("El impeller sube en rampa durante la carrera") {
   EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm / 2);
   rig.follower.update(400);
   EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
+}
+
+TEST("Frenado en curva: con la línea lejos del centro baja la velocidad base") {
+  Rig rig;
+  rig.config.control.curveSlowdownPercent = 40;
+  rig.follower.start(200, 0);
+  uint32_t now = 1000;
+  slideLineTo(rig, 7, 7, now);
+  const int centeredSum = rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm;
+  slideLineTo(rig, 8, 12, now);
+  const int curveSum = rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm;
+  EXPECT_EQ(centeredSum, 2 * 200);
+  EXPECT_TRUE(curveSum < centeredSum);  // la suma de ruedas refleja la velocidad base
+}
+
+TEST("Hueco en una recta: sigue recto y no gira") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);  // 100 ms recto y centrado
+  rig.bus.fill(220);                                                // hueco: todo blanco
+  rig.follower.update(1150);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 150);
+  EXPECT_EQ(rig.drivetrain.rightMotor.pwm, 150);
+}
+
+TEST("Hueco más largo que gapBridgeMs: empieza a buscar la línea") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);
+  rig.bus.fill(220);
+  rig.follower.update(1100 + rig.config.lostLine.gapBridgeMs + 1);
+  EXPECT_TRUE(rig.drivetrain.leftMotor.pwm != rig.drivetrain.rightMotor.pwm);
+}
+
+TEST("Línea perdida en curva (no centrada): no se trata como hueco") {
+  Rig rig;
+  rig.follower.start(150, 0);
+  uint32_t now = 1000;
+  slideLineTo(rig, 7, 12, now);
+  rig.bus.fill(220);
+  rig.follower.update(now + 5);
+  EXPECT_TRUE(rig.drivetrain.leftMotor.pwm != rig.drivetrain.rightMotor.pwm);
+}
+
+TEST("Pico agudo: la rama que aparece a la derecha decide el giro") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;  // rama de regreso entrando por la derecha
+  rig.follower.update(1101);
+  rig.bus.fill(220);  // la línea principal termina en el pico
+  rig.follower.update(1105);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.outerMotorPwm);
+  EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.innerMotorPwm);
 }

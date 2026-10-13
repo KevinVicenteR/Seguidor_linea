@@ -8,18 +8,21 @@
 #include <vector>
 
 #include "Config.h"
+#include "Geometry.h"
 
 namespace sim {
 
 struct ScenarioSpec {
   std::size_t trackIndex = 0;
   int16_t cruisePwm = 100;
-  atlas::LineColor lineColor = atlas::LineColor::White;
+  atlas::LineColor lineColor = atlas::LineColor::Black;  // línea negra sobre fondo blanco
   int16_t impellerPwm = 200;
   double sensorNoiseSigma = 4.0;
   uint32_t seed = 1;
   bool required = true;  // si falla, la simulación termina con error
   double timeLimitS = 40.0;  // la pista debe completarse antes de este tiempo
+  bool customStart = false;  // salir desde startPoint en vez del INICIO de la pista
+  Vec2 startPoint;
   std::string label;
 };
 

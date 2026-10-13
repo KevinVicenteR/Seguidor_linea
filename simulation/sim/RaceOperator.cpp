@@ -25,17 +25,9 @@ void RaceOperator::enter(Phase phase, double timeS) {
 }
 
 void RaceOperator::holdAtLateralOffset(double offset) {
-  Pose pose = plan_.startPose;
+  Pose pose = plan_.calibrationPose;
   pose.position = pose.position + pose.left() * offset;
   robot_.place(pose);
-}
-
-void RaceOperator::pressColorButton(bool pressed) {
-  if (plan_.lineColor == atlas::LineColor::White) {
-    panel_.pressButton1(pressed);
-  } else {
-    panel_.pressButton2(pressed);
-  }
 }
 
 void RaceOperator::pressSpeedButton(bool pressed) {
@@ -52,14 +44,14 @@ void RaceOperator::update(double timeS) {
   switch (phase_) {
     case Phase::WaitBoot:
       if (timeS >= kBootS) {
-        pressColorButton(true);
-        enter(Phase::PressColor, timeS);
+        panel_.pressButton1(true);
+        enter(Phase::PressStartCalibration, timeS);
       }
       break;
 
-    case Phase::PressColor:
+    case Phase::PressStartCalibration:
       if (elapsed >= kPressS) {
-        pressColorButton(false);
+        panel_.pressButton1(false);
         enter(Phase::Sweep, timeS);
       }
       break;

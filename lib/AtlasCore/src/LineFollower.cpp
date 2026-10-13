@@ -19,6 +19,9 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs) {
   running_ = true;
   stopping_ = false;
   lastOnLineMs_ = nowMs;
+  // Si arranca sobre un hueco, avanza recto hasta encontrar la línea.
+  centered_ = true;
+  centeredSinceMs_ = nowMs - config_.lostLine.gapStraightMs;
 }
 
 void LineFollower::requestStop(uint32_t nowMs) {
@@ -36,7 +39,14 @@ void LineFollower::update(uint32_t nowMs) {
   }
 
   reading_ = sensors_.readLine();
-  command_ = reading_.isTrackable() ? followLine(currentVelocity(nowMs), nowMs) : recoverLine(nowMs);
+  const int16_t velocity = currentVelocity(nowMs);
+  if (reading_.isTrackable()) {
+    command_ = followLine(velocity, nowMs);
+  } else if (isCrossingGap(nowMs)) {
+    command_ = bridgeGap(velocity);
+  } else {
+    command_ = recoverLine(nowMs);
+  }
   command_.left = clampWheel(command_.left);
   command_.right = clampWheel(command_.right);
   command_.impeller = impellerRamp_.valueAt(nowMs);
@@ -52,11 +62,47 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   lastOnLineMs_ = nowMs;
 
   const int32_t error = static_cast<int32_t>(reading_.position) - kLinePositionCenter;
+  trackStraightRun(error, nowMs);
   const int16_t correction = pd_.update(error);
+  const int16_t base = slowDownForCurve(velocity, error);
 
   MotorCommand command;
-  command.left = velocity + correction;
-  command.right = velocity - correction;
+  command.left = base + correction;
+  command.right = base - correction;
+  return command;
+}
+
+int16_t LineFollower::slowDownForCurve(int16_t velocity, int32_t error) const {
+  const int32_t magnitude = error < 0 ? -error : error;
+  const int32_t reduction =
+      static_cast<int32_t>(velocity) * config_.control.curveSlowdownPercent * magnitude / (100L * kLinePositionCenter);
+  return static_cast<int16_t>(velocity - reduction);
+}
+
+void LineFollower::trackStraightRun(int32_t error, uint32_t nowMs) {
+  const bool centered = looksStraight(error);
+  if (centered && !centered_) centeredSinceMs_ = nowMs;
+  centered_ = centered;
+}
+
+// Línea limpia y centrada: sin cruce/esquina, sin extremos y sin otras ramas.
+bool LineFollower::looksStraight(int32_t error) const {
+  const int32_t magnitude = error < 0 ? -error : error;
+  return magnitude <= config_.lostLine.gapCenterTolerance && !reading_.ambiguous && !reading_.leftEdgeDetected &&
+         !reading_.rightEdgeDetected && !reading_.otherLineLeft && !reading_.otherLineRight;
+}
+
+// Hueco: la línea desapareció justo después de un tramo recto y centrado.
+bool LineFollower::isCrossingGap(uint32_t nowMs) const {
+  const LostLineConfig& lost = config_.lostLine;
+  const bool cameFromStraight = centered_ && lastOnLineMs_ - centeredSinceMs_ >= lost.gapStraightMs;
+  return !reading_.onLine && cameFromStraight && nowMs - lastOnLineMs_ <= lost.gapBridgeMs;
+}
+
+MotorCommand LineFollower::bridgeGap(int16_t velocity) const {
+  MotorCommand command;
+  command.left = velocity;
+  command.right = velocity;
   return command;
 }
 
@@ -78,9 +124,11 @@ MotorCommand LineFollower::recoverLine(uint32_t nowMs) const {
   return command;
 }
 
+// Lado hacia donde girar si se pierde la línea: el extremo por donde salió
+// o el lado por donde apareció otra rama (pico agudo).
 void LineFollower::rememberLastSide() {
-  if (reading_.leftEdgeDetected) lastSide_ = Side::Left;
-  if (reading_.rightEdgeDetected) lastSide_ = Side::Right;
+  if (reading_.leftEdgeDetected || reading_.otherLineLeft) lastSide_ = Side::Left;
+  if (reading_.rightEdgeDetected || reading_.otherLineRight) lastSide_ = Side::Right;
 }
 
 int16_t LineFollower::clampWheel(int16_t pwm) const {

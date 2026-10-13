@@ -56,15 +56,20 @@ std::string jsonArray(const std::vector<T>& items, F toJson) {
 std::string trackJson(const TrackEntry& entry) {
   const Track& track = entry.track;
   std::ostringstream points;
+  std::ostringstream painted;
   for (std::size_t i = 0; i < track.points().size(); i += kTrackPointStride) {
-    if (i) points << ",";
+    if (i) {
+      points << ",";
+      painted << ",";
+    }
     points << rounded(track.points()[i].x * 1000) << "," << rounded(track.points()[i].y * 1000);
+    painted << (track.isPainted(i) ? 1 : 0);
   }
   std::ostringstream out;
   out << "{\"name\":" << quoted(track.name()) << ",\"description\":" << quoted(track.description())
       << ",\"length\":" << number(track.length(), 2) << ",\"minRadius\":" << number(track.minimumTurnRadius(), 3)
       << ",\"laps\":" << entry.laps << ",\"lineWidth\":" << number(track.lineWidth(), 3) << ",\"points\":["
-      << points.str() << "]}";
+      << points.str() << "],\"painted\":[" << painted.str() << "]}";
   return out.str();
 }
 

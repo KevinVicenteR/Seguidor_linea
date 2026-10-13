@@ -19,7 +19,6 @@ constexpr double kPhysicsStepS = 100e-6;    // paso fijo de integración
 constexpr double kMonitorPeriodS = 1e-3;
 constexpr double kHardLimitS = 150.0;
 constexpr double kStoppedSpeed = 0.05;
-constexpr uint8_t kCalibratedSpan = 40;     // max - min mínimo para un sensor útil
 
 // Une el paso del tiempo virtual con la física, el operador y el árbitro.
 class World : public TimeListener {
@@ -54,20 +53,13 @@ class World : public TimeListener {
   double nextMonitorS_ = 0.0;
 };
 
-Pose startPoseFor(const TrackEntry& entry, const RobotParams& params, double* startArcLength) {
-  *startArcLength = entry.track.nearestArcLength(entry.startPoint);
-  Pose onLine = entry.track.poseAt(*startArcLength);
+// Pose del robot con la barra de sensores centrada sobre `point` de la pista.
+Pose robotPoseAt(const Track& track, const Vec2& point, const RobotParams& params, double* arcLength) {
+  *arcLength = track.nearestArcLength(point);
+  Pose onLine = track.poseAt(*arcLength);
   Pose robot = onLine;
   robot.position = onLine.position - onLine.forward() * params.sensorBarAhead;
   return robot;
-}
-
-int countCalibratedSensors(const atlas::LineSensorArray& sensors) {
-  int count = 0;
-  for (uint8_t i = 0; i < atlas::kSensorCount; i++) {
-    if (sensors.maxValues()[i] >= sensors.minValues()[i] + kCalibratedSpan) count++;
-  }
-  return count;
 }
 
 }  // namespace
@@ -77,6 +69,7 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
 
   atlas::RobotConfig config;
   config.impeller.pwm = spec.impellerPwm;
+  config.sensors.lineColor = spec.lineColor;
 
   SensorModel sensorModel = sensorModel_;
   sensorModel.noiseSigma = spec.sensorNoiseSigma;
@@ -95,9 +88,11 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
   // Escenario
   double startArcLength = 0.0;
   OperatorPlan plan;
-  plan.lineColor = spec.lineColor;
   plan.speedPresses = (spec.cruisePwm - config.speed.basePwm) / config.speed.stepPwm;
-  plan.startPose = startPoseFor(entry, robotParams_, &startArcLength);
+  double calibrationArcLength = 0.0;
+  plan.calibrationPose = robotPoseAt(entry.track, entry.startPoint, robotParams_, &calibrationArcLength);
+  plan.startPose = robotPoseAt(entry.track, spec.customStart ? spec.startPoint : entry.startPoint, robotParams_,
+                               &startArcLength);
   plan.raceTimeoutS = spec.timeLimitS;
 
   RaceMonitor monitor(entry.track, startArcLength, entry.laps);
@@ -119,7 +114,7 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
   if (!result.completed && result.failureReason.empty()) {
     result.failureReason = "No terminó en " + std::to_string(static_cast<int>(spec.timeLimitS)) + " s";
   }
-  result.calibratedSensors = countCalibratedSensors(sensors);
+  result.calibratedSensors = sensors.calibratedSensorCount();
   result.stoppedCleanly = app.state() == atlas::AppState::Finished && std::fabs(robot.speed()) < kStoppedSpeed;
   result.wallSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - wallStart).count();
   return result;

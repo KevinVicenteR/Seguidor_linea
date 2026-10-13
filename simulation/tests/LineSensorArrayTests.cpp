@@ -18,15 +18,16 @@ void calibrate(LineSensorArray& sensors, test::FakeSensorBus& bus) {
 
 }  // namespace
 
+// Las lecturas se invierten (línea negra): ADC 30 -> 225 y ADC 220 -> 35.
 TEST("Calibración: umbral al 50% entre mínimo y máximo") {
   test::FakeSensorBus bus;
   SensorConfig config;
   LineSensorArray sensors(bus, config);
   calibrate(sensors, bus);
   for (uint8_t i = 0; i < kSensorCount; i++) {
-    EXPECT_EQ(sensors.minValues()[i], 30);
-    EXPECT_EQ(sensors.maxValues()[i], 220);
-    EXPECT_EQ(sensors.thresholds()[i], 125);
+    EXPECT_EQ(sensors.minValues()[i], 35);
+    EXPECT_EQ(sensors.maxValues()[i], 225);
+    EXPECT_EQ(sensors.thresholds()[i], 130);
   }
 }
 
@@ -35,19 +36,15 @@ TEST("Calibración ignora un pico aislado de ruido") {
   SensorConfig config;
   config.collectorSamples = 2;
   config.averageSamples = 1;
-  LineSensorArray sensors(bus, config);
-  sensors.resetCalibration();
-  bus.fill(30);
-  sensors.collectCalibrationSamples();
   // Un solo pico no basta: el máximo solo sube si todas las muestras lo superan.
   struct SpikeBus : public ILineSensorBus {
     int reads = 0;
-    uint8_t read(uint8_t) override { return reads++ < kSensorCount ? 250 : 30; }
+    uint8_t read(uint8_t) override { return reads++ < kSensorCount ? 0 : 220; }
   } spike;
   LineSensorArray spiky(spike, config);
   spiky.resetCalibration();
   spiky.collectCalibrationSamples();
-  EXPECT_EQ(spiky.maxValues()[0], 30);
+  EXPECT_EQ(spiky.maxValues()[0], 35);
 }
 
 TEST("Sensor sin calibrar nunca reporta línea") {
@@ -56,7 +53,7 @@ TEST("Sensor sin calibrar nunca reporta línea") {
   LineSensorArray sensors(bus, config);
   sensors.resetCalibration();
   sensors.finishCalibration();
-  bus.fill(255);
+  bus.fill(0);
   EXPECT_FALSE(sensors.readLine().onLine);
 }
 
@@ -84,17 +81,14 @@ TEST("Línea en el extremo izquierdo activa el borde y no es seguible") {
   EXPECT_FALSE(reading.isTrackable());  // posición 0: igual que el firmware original
 }
 
-TEST("Línea negra: las lecturas se invierten") {
+TEST("Solo línea negra: la configuración por defecto invierte las lecturas") {
   test::FakeSensorBus bus;
   SensorConfig config;
   LineSensorArray sensors(bus, config);
-  sensors.setLineColor(LineColor::Black);
+  EXPECT_TRUE(sensors.lineColor() == LineColor::Black);
   calibrate(sensors, bus);
-  bus.lineAt(0, 15, 220, 220);
-  bus.values[11] = 30;  // línea negra = lectura baja
-  bus.values[12] = 30;
-  const LineReading reading = sensors.readLine();
-  EXPECT_EQ(reading.position, 11500);
+  bus.lineAt(11, 12);  // ADC bajo en 11-12 = línea negra
+  EXPECT_EQ(sensors.readLine().position, 11500);
 }
 
 TEST("Sin línea bajo la barra") {
@@ -102,7 +96,7 @@ TEST("Sin línea bajo la barra") {
   SensorConfig config;
   LineSensorArray sensors(bus, config);
   calibrate(sensors, bus);
-  bus.fill(30);
+  bus.fill(220);  // todo fondo blanco
   EXPECT_FALSE(sensors.readLine().onLine);
 }
 
@@ -114,7 +108,7 @@ TEST("Cruce: elige el grupo de sensores más cercano a la posición anterior") {
   bus.lineAt(6, 7);
   sensors.readLine();
   bus.lineAt(6, 7);
-  bus.values[13] = bus.values[14] = 220;  // segunda línea a la derecha
+  bus.values[13] = bus.values[14] = 30;  // segunda línea a la derecha
   EXPECT_EQ(sensors.readLine().position, 6500);
 }
 
@@ -136,6 +130,6 @@ TEST("Algoritmo original (sin seguimiento de grupo) promedia todo") {
   LineSensorArray sensors(bus, config);
   calibrate(sensors, bus);
   bus.lineAt(2, 3);
-  bus.values[12] = bus.values[13] = 220;
+  bus.values[12] = bus.values[13] = 30;
   EXPECT_EQ(sensors.readLine().position, 7500);
 }

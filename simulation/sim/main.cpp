@@ -79,15 +79,13 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
   }
   if (options.quick || options.onlyTrack >= 0) return specs;
 
-  const std::size_t chicanes = findTrack(tracks, "Chicanas largas");
-  ScenarioSpec black = makeSpec(chicanes, tracks[chicanes].track.name(), 190, true, " · línea negra");
-  black.lineColor = atlas::LineColor::Black;
-  specs.push_back(black);
-
-  const std::size_t hexagon = findTrack(tracks, "Hexágono de figuras");
-  ScenarioSpec blackHexagon = makeSpec(hexagon, tracks[hexagon].track.name(), 190, true, " · línea negra");
-  blackHexagon.lineColor = atlas::LineColor::Black;
-  specs.push_back(blackHexagon);
+  const std::size_t competition = findTrack(tracks, "Pista de competencia");
+  for (int16_t pwm : {190, 220}) {
+    ScenarioSpec fromGap = makeSpec(competition, tracks[competition].track.name(), pwm, true, " · sale del hueco");
+    fromGap.customStart = true;
+    fromGap.startPoint = competitionGapCenter();
+    specs.push_back(fromGap);
+  }
 
   const std::size_t star = findTrack(tracks, "Estrella de cinco puntas");
   ScenarioSpec noisy = makeSpec(star, tracks[star].track.name(), 190, true, " · ruido x3");

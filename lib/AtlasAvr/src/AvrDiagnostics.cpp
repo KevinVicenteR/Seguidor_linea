@@ -117,12 +117,7 @@ void AvrDiagnostics::testSensors() {
   const bool calibrated = input_.button1();
   leds_.confirm(kDebounceMs, 1);
 
-  Serial.println(F("LINEA BLANCA [SW1] / NEGRA [SW2]"));
-  while (!anyButton()) {
-  }
-  sensors_.setLineColor(input_.button2() ? LineColor::Black : LineColor::White);
-  leds_.confirm(kDebounceMs, 1);
-
+  Serial.println(F("Modo: linea negra sobre fondo blanco"));
   if (calibrated) calibrateInteractively();
 
   // Mantener un botón muestra lecturas crudas. RESET para salir.
@@ -148,6 +143,9 @@ void AvrDiagnostics::calibrateInteractively() {
   printRow(F("MAX:\t"), sensors_.maxValues());
   printRow(F("MIN:\t"), sensors_.minValues());
   printRow(F("TH:\t"), sensors_.thresholds());
+  Serial.print(F("Sensores calibrados: "));
+  Serial.print(sensors_.calibratedSensorCount());
+  Serial.println(sensors_.isCalibrationValid() ? F("/16 OK") : F("/16 INCOMPLETA, repita la pasada"));
   Serial.println(F("Presione un boton para iniciar la lectura."));
   waitForAnyButton();
 }

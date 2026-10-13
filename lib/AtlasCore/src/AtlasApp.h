@@ -1,8 +1,11 @@
 /*
   AtlasApp.h - Máquina de estados de la secuencia de operación del manual:
 
-    Boot -> SelectLineColor -> Calibrating -> Ready -> Running -> Finished
-             (SW1 blanca / SW2 negra)        (velocidad, READY, GO)
+    Boot -> WaitCalibration -> Calibrating -> Ready -> Running -> Finished
+            (SW1 o SW2: línea negra)    |      (velocidad, READY, GO)
+                    ^-------------------+ calibración incompleta (LED2 rápido)
+
+  Calibración válida: animación de confirmación y LED0 + LED1 fijos.
 
   tick() se llama continuamente desde loop(). Las animaciones cortas siguen
   siendo bloqueantes (igual que el original) a través de IClock::delayMs.
@@ -20,7 +23,7 @@
 
 namespace atlas {
 
-enum class AppState : uint8_t { Boot, SelectLineColor, Calibrating, Ready, Running, Finished };
+enum class AppState : uint8_t { Boot, WaitCalibration, Calibrating, Ready, Running, Finished };
 
 class AtlasApp {
  public:
@@ -37,14 +40,15 @@ class AtlasApp {
  private:
   bool anyButton() { return input_.button1() || input_.button2(); }
 
-  void selectLineColor();
+  void waitCalibration();
   void calibrate();
   void prepareToRun();
   void run();
   void showFinished();
 
-  void startCalibration(LineColor color);
+  void startCalibration();
   void finishCalibration();
+  void restoreCalibratedIndicator();
   void updateImpellerPreSpin();
   void adjustCruiseSpeed();
   void startRace();
