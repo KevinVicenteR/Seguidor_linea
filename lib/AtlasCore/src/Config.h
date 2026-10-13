@@ -40,6 +40,9 @@ struct SensorConfig {
   // La línea no puede desplazarse más que esto entre dos lecturas (750 us);
   // un salto mayor indica que otra línea se unió al grupo.
   uint16_t maxPositionJump = 1000;
+  // Al recuperar la línea tras perderla, la barra la cruza rápido: durante
+  // estas lecturas (~30 ms) no se filtran saltos ni se mantiene la posición.
+  uint8_t reacquireFreeReads = 40;
   // Límite de lecturas consecutivas manteniendo la posición, definido a PWM
   // de referencia; el seguidor lo escala con la velocidad para que equivalga
   // siempre a la misma distancia (~30 cm), también a velocidad baja.

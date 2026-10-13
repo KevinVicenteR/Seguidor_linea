@@ -117,8 +117,10 @@ TEST("Cruce: un grupo demasiado ancho mantiene la última posición") {
   SensorConfig config;
   LineSensorArray sensors(bus, config);
   calibrate(sensors, bus);
-  bus.lineAt(7, 8);
-  sensors.readLine();
+  for (int i = 0; i < 60; i++) {  // sigue la línea un rato (fuera de la ventana de recuperación)
+    bus.lineAt(7, 8);
+    sensors.readLine();
+  }
   bus.lineAt(7, 12);  // la línea transversal se une a la principal
   EXPECT_EQ(sensors.readLine().position, kLinePositionCenter);
 }
@@ -173,4 +175,23 @@ TEST("Sensor dañado: se acepta con 15 sensores y toma el promedio de sus vecino
 
   bus.inner.lineAt(7, 9);  // la línea pasa justo sobre el sensor dañado
   EXPECT_EQ(sensors.readLine().position, 8000);
+}
+
+TEST("Al recuperar la línea no se filtran saltos (la barra la cruza rápido)") {
+  test::FakeSensorBus bus;
+  SensorConfig config;
+  LineSensorArray sensors(bus, config);
+  calibrate(sensors, bus);
+  for (int i = 0; i < 60; i++) {
+    bus.lineAt(7, 8);
+    sensors.readLine();
+  }
+  bus.fill(220);  // se perdió la línea
+  sensors.readLine();
+  bus.lineAt(13, 14);  // la vuelve a ver en un extremo...
+  EXPECT_EQ(sensors.readLine().position, 13500);
+  bus.lineAt(9, 10);  // ...y la barra la cruza rápido: salto de 4 sensores
+  const LineReading reading = sensors.readLine();
+  EXPECT_FALSE(reading.ambiguous);
+  EXPECT_EQ(reading.position, 9500);
 }

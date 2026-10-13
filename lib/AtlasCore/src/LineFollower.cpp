@@ -92,6 +92,7 @@ void LineFollower::update(uint32_t nowMs) {
   scaleCrossingHoldToSpeed(velocity);
   reading_ = sensors_.readLine();
   if (reading_.isTrackable()) {
+    if (recovering_) pd_.reset();  // sin tirón del derivativo al recuperar la línea
     recovering_ = false;
     bridging_ = false;
     command_ = followLine(governor_.apply(guidedVelocity(velocity)), nowMs);

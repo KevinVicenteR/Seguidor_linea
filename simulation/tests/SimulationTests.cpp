@@ -49,7 +49,7 @@ TEST("Todas las pistas del catálogo se construyen y son largas") {
   const std::vector<TrackEntry> library = buildTrackLibrary();
   EXPECT_TRUE(library.size() >= 10);
   for (const TrackEntry& entry : library) {
-    EXPECT_TRUE(entry.track.length() > 9.0);
+    EXPECT_TRUE(entry.track.length() > 8.0);
     EXPECT_TRUE(entry.track.distanceToLine(entry.startPoint) < 0.005);
   }
 }

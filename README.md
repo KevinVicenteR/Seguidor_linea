@@ -42,6 +42,14 @@ Estrategia con 3 intentos: si el 1 falla, el 2 es reconocimiento y el 3 el rápi
 
 Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde la salida.
 
+## Pista de práctica (zonas donde se salía el robot real)
+
+`Pista de práctica` reproduce las dos zonas marcadas en la foto: la "casa" (esquina hacia adentro, pico agudo y diagonal) con un gancho en U, y las ondas con una U profunda; curvas de 9–10 cm de radio y tramos punteados. El robot se salía porque al buscar la línea la barra la cruzaba rápido y (1) el filtro de saltos de los cruces descartaba esas lecturas y (2) el derivativo daba un volantazo al recuperarla. Ahora, durante ~30 ms tras recuperar la línea no se filtran saltos y el PD se reinicia.
+
+Con turbina, 10 variantes por modelo de robot: 0 fallas en 90 intentos; reconocimiento 13.8–15.4 s y vueltas con mapa 8.6 s (nominal) a 12.9 s (robot real). En la pista de competencia mejoró también: 13.2 s con mapa (robot real 17.7 s).
+
+**Turbina:** el firmware la usa a PWM 200 durante la carrera; con READY hace una rampa previa de 1 s (LED2 fijo cuando está lista). Solo hay que conectarla a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
+
 ## Aprendizaje de pista (resultados en simulación)
 
 Sin encoders: la distancia se estima integrando el PWM en el tiempo y se corrige en cada hueco de la línea. El mapa (curvatura promedio cada ~10 cm, huecos y "confianza") se guarda en EEPROM.
@@ -97,7 +105,7 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         69 pruebas unitarias y de integración
+simulation/tests/         70 pruebas unitarias y de integración
 simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
@@ -112,7 +120,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1485 B de RAM (73 %) y 25.9 KB de Flash (84 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1490 B de RAM (73 %) y 26.0 KB de Flash (85 %).
 
 ## Simulador y pruebas (CMake)
 
@@ -141,6 +149,7 @@ cmake --build build --target simulate
 
 | Pista | Largo | Qué la hace difícil |
 |---|---|---|
+| **Pista de práctica** | 8.6 m | Zonas reales donde se salía: casa con pico agudo, gancho en U, ondas con U profunda (r 9–10 cm), punteados |
 | **Pista de competencia** | 25.9 m | Reglamento: trovicel 3.66 × 2.44 m, cinta de 2 cm, dos picos agudos de ~56°, dos huecos de ~9 cm, dos INICIO |
 | Óvalo de velocidad | 10.0 m ×2 | Referencia de velocidad máxima |
 | Chicanas largas | 19.7 m | Chicanas suaves y cerradas, eses amplias |
@@ -168,7 +177,7 @@ Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corrid
 
 ### Resultados actuales
 
-89/97 escenarios aprobados; ningún obligatorio falla. No pasan: los rizos de Trébol y Triángulo (lazos más cerrados que el límite geométrico; el perfil Seguro prioriza la pista de competencia con robots lentos o con inercia) y la prueba intencional sin succión. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
+96/105 escenarios aprobados; ningún obligatorio falla. No pasan: el Triángulo de rizos (lazos más cerrados que el límite geométrico; el perfil Seguro prioriza la pista de competencia con robots lentos o con inercia) y la prueba intencional sin succión. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
 
 - En un barrido de 480 corridas (12 pistas × PWM 160–250 × 4 semillas de ruido) solo fallan 2 corridas del triángulo de rizos a PWM 240; el resto, incluida la pista de competencia, 0.
 - **Gran Premio sin impeller: falla a propósito** (muestra el efecto de la succión).

@@ -119,8 +119,10 @@ LineReading LineSensorArray::readLine() {
   if (!reading.onLine) {
     wasOnLine_ = false;
     heldReads_ = 0;
+    readsSinceReacquired_ = 0;
     return reading;
   }
+  if (readsSinceReacquired_ < 0xFF) readsSinceReacquired_++;
 
   rememberNearbyLines(reading);
   const uint8_t width = cluster.last - cluster.first + 1;
@@ -130,7 +132,8 @@ LineReading LineSensorArray::readLine() {
       otherLineNearby() && (width > normalWidth_ || intensity > normalIntensity_ + normalIntensity_ / 5);
 
   // En un cruce se mantiene la última posición: el robot sigue recto.
-  if ((merging || isAmbiguous(cluster, reading.position)) && heldReads_ < heldReadsLimit_) {
+  const bool ambiguous = !isReacquiring() && (merging || isAmbiguous(cluster, reading.position));
+  if (ambiguous && heldReads_ < heldReadsLimit_) {
     reading.position = lastPosition_;
     reading.ambiguous = true;
     heldReads_++;
@@ -181,6 +184,7 @@ void LineSensorArray::learnNormalShape(uint8_t width, uint16_t intensity) {
 void LineSensorArray::resetTracking() {
   lastPosition_ = kLinePositionCenter;
   wasOnLine_ = false;
+  readsSinceReacquired_ = 0xFF;
   heldReads_ = 0;
   readsSinceOtherLine_ = 0xFFFF;
   normalWidth_ = config_.maxLineWidthSensors;

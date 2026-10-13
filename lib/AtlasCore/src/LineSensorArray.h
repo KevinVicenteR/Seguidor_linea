@@ -66,6 +66,7 @@ class LineSensorArray {
   uint16_t clusterIntensity(Cluster cluster) const;
   Cluster nearestCluster() const;
   bool isAmbiguous(Cluster cluster, uint16_t position) const;
+  bool isReacquiring() const { return readsSinceReacquired_ <= config_.reacquireFreeReads; }
   void rememberNearbyLines(const LineReading& reading);
   bool otherLineNearby() const;
   void learnNormalShape(uint8_t width, uint16_t intensity);
@@ -79,6 +80,7 @@ class LineSensorArray {
   uint8_t threshold_[kSensorCount] = {};
   uint16_t lastPosition_ = kLinePositionCenter;
   bool wasOnLine_ = false;
+  uint8_t readsSinceReacquired_ = 0;
   uint16_t heldReads_ = 0;
   uint16_t heldReadsLimit_;
   uint16_t readsSinceOtherLine_ = 0xFFFF;
