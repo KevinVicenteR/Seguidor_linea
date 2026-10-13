@@ -22,7 +22,8 @@ class SpeedPlanner {
   explicit SpeedPlanner(const PlannerConfig& config) : config_(&config) {}
   void configure(const PlannerConfig& config) { config_ = &config; }
 
-  int16_t limitFor(uint8_t curvature) const;
+  // curveSpeedPercent escala solo las curvas (aprendido de salidas anteriores).
+  int16_t limitFor(uint8_t curvature, uint8_t curveSpeedPercent = 100) const;
   // % de velocidad según qué tan difícil fue el reconocimiento.
   uint8_t confidencePercent(const TrackMap& map) const;
   // Velocidad planeada para el tramo `bin` (fuera del mapa: velocidad segura).

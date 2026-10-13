@@ -21,7 +21,7 @@ class TrackMapStore {
 
  private:
   static constexpr uint16_t kBaseAddress = 64;  // después de la calibración
-  static constexpr uint8_t kSignature = 0x5E;  // v2: incluye la confianza
+  static constexpr uint8_t kSignature = 0x5F;  // v3: confianza y velocidad de curva
 
   void put(uint16_t offset, uint8_t value, uint8_t* checksum);
   uint8_t get(uint16_t offset, uint8_t* checksum);

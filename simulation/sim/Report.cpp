@@ -68,7 +68,8 @@ std::string trackJson(const TrackEntry& entry) {
   std::ostringstream out;
   out << "{\"name\":" << quoted(track.name()) << ",\"description\":" << quoted(track.description())
       << ",\"length\":" << number(track.length(), 2) << ",\"minRadius\":" << number(track.minimumTurnRadius(), 3)
-      << ",\"laps\":" << entry.laps << ",\"lineWidth\":" << number(track.lineWidth(), 3) << ",\"points\":["
+      << ",\"laps\":" << entry.laps << ",\"lineWidth\":" << number(track.lineWidth(), 3)
+      << ",\"startArc\":" << number(track.nearestArcLength(entry.startPoint), 3) << ",\"points\":["
       << points.str() << "],\"painted\":[" << painted.str() << "]}";
   return out.str();
 }
@@ -127,20 +128,31 @@ std::string buildReportJson(const ReportContext& context) {
          "}";
 }
 
-void writeViewer(const std::string& templatePath, const std::string& outputPath, const ReportContext& context) {
+// Copia la plantilla HTML reemplazando el marcador por los datos JSON.
+void fillTemplate(const std::string& templatePath, const std::string& outputPath, const std::string& json) {
   std::ifstream in(templatePath);
-  if (!in) throw std::runtime_error("No se encontró la plantilla del visor: " + templatePath);
+  if (!in) throw std::runtime_error("No se encontró la plantilla: " + templatePath);
   std::stringstream buffer;
   buffer << in.rdbuf();
   std::string html = buffer.str();
 
   const std::size_t at = html.find(kDataPlaceholder);
   if (at == std::string::npos) throw std::runtime_error("La plantilla no contiene el marcador de datos");
-  html.replace(at, std::string(kDataPlaceholder).size(), buildReportJson(context));
+  html.replace(at, std::string(kDataPlaceholder).size(), json);
 
   std::ofstream out(outputPath);
   if (!out) throw std::runtime_error("No se pudo escribir " + outputPath);
   out << html;
+}
+
+void writeViewer(const std::string& templatePath, const std::string& outputPath, const ReportContext& context) {
+  fillTemplate(templatePath, outputPath, buildReportJson(context));
+}
+
+void writeAnalyzer(const std::string& templatePath, const std::string& outputPath,
+                   const std::vector<TrackEntry>& tracks, const std::string& exampleLog) {
+  fillTemplate(templatePath, outputPath,
+               "{\"tracks\":" + jsonArray(tracks, trackJson) + ",\"exampleLog\":" + quoted(exampleLog) + "}");
 }
 
 void writeSummaryCsv(const std::string& outputPath, const ReportContext& context) {

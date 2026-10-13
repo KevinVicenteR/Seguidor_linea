@@ -62,6 +62,7 @@ struct ScenarioResult {
   int calibratedSensors = 0;
   bool stoppedCleanly = false;
   double wallSeconds = 0.0;
+  std::string robotLog;  // registro exportado por el firmware (formato del modo diagnóstico)
 
   std::vector<TelemetrySample> telemetry;
 

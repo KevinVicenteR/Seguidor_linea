@@ -40,9 +40,14 @@ class TrackMap {
   // Acceso para guardar/cargar en memoria no volátil.
   uint8_t* rawBins() { return bins_; }
   uint16_t* rawGaps() { return gaps_; }
-  void restore(uint16_t length, uint8_t gapCount, uint16_t lostPerMille);
-  // Tras una vuelta guiada fallida: el mapa se trata como más difícil.
-  void penalize(uint16_t extraLostPerMille) { lostPerMille_ += extraLostPerMille; }
+  void restore(uint16_t length, uint8_t gapCount, uint16_t lostPerMille, uint8_t curveSpeedPercent);
+  // % de la velocidad de curva planeada; baja cada vez que una vuelta guiada
+  // se sale (lo aprendido en una curva aplica a las curvas parecidas).
+  uint8_t curveSpeedPercent() const { return curveSpeedPercent_; }
+  void reduceCurveSpeed(uint8_t step, uint8_t minimum);
+  // Marca como más cerrada la zona [bin - before, bin + after] (el robot se
+  // salió ahí): el planificador frenará antes y más en ese lugar.
+  void markDangerZone(uint16_t bin, uint8_t before, uint8_t after, uint8_t boost);
   void invalidate() { valid_ = false; }
 
  private:
@@ -51,6 +56,7 @@ class TrackMap {
   uint16_t length_ = 0;
   uint8_t gapCount_ = 0;
   uint16_t lostPerMille_ = 0;
+  uint8_t curveSpeedPercent_ = 100;
   bool valid_ = false;
 
   void closeBin();

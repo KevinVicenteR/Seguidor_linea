@@ -20,6 +20,10 @@
 #include "ScenarioRunner.h"
 #include "TrackLibrary.h"
 
+#ifndef ATLAS_ANALYZER_TEMPLATE
+#define ATLAS_ANALYZER_TEMPLATE "simulation/viewer/analyzer_template.html"
+#endif
+
 #ifndef ATLAS_VIEWER_TEMPLATE
 #define ATLAS_VIEWER_TEMPLATE "simulation/viewer/viewer_template.html"
 #endif
@@ -122,6 +126,33 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
 }
 
 // Un escenario con aprendizaje produce un resultado por intento.
+// Registro de ejemplo para el analizador: un robot lento con un perfil Rápido
+// demasiado agresivo se sale en el intento 2 y se corrige solo en el 3.
+std::string exampleRobotLog(const std::vector<TrackEntry>& tracks) {
+  const std::size_t competition = findTrack(tracks, "Pista de competencia");
+  atlas::RobotConfig aggressive = atlas::fastProfile();
+  aggressive.planner.fullTurnPwm = 180;
+  aggressive.planner.brakePwmPerBin = 30;
+  aggressive.planner.lookaheadBins = 4;
+  aggressive.planner.maxPwm = 255;
+  aggressive.planner.slowdownPerLostPerMille = 0;
+  aggressive.adaptive.speedGovernor = false;
+  RobotParams slowRobot;
+  slowRobot.motorTimeConstant = 0.070;
+  slowRobot.yawTimeConstant = 0.040;
+  slowRobot.commandLatencyS = 0.004;
+
+  ScenarioSpec spec;
+  spec.trackIndex = competition;
+  spec.seed = 505;
+  spec.learnTrack = true;
+  spec.attempts = 3;
+  spec.impellerPwm = 0;
+  const std::vector<ScenarioResult> attempts =
+      ScenarioRunner(slowRobot, SensorModel(), atlas::safeProfile(), aggressive).runAttempts(tracks[competition], spec);
+  return attempts.back().robotLog;
+}
+
 std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs) {
   std::vector<std::vector<ScenarioResult>> perSpec(specs.size());
   std::atomic<std::size_t> next{0};
@@ -179,6 +210,7 @@ int main(int argc, char** argv) {
   const ReportContext context{tracks, results, firmware, robot};
   writeViewer(options.templatePath, options.outputDir + "/index.html", context);
   writeSummaryCsv(options.outputDir + "/resumen.csv", context);
+  writeAnalyzer(ATLAS_ANALYZER_TEMPLATE, options.outputDir + "/analizador.html", tracks, exampleRobotLog(tracks));
 
   int requiredFailures = 0;
   int passed = 0;

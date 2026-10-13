@@ -46,8 +46,11 @@ class LineFollower {
   bool runFailed() const;
   uint32_t longestLostMs() const { return longestLostMs_; }
   uint16_t lostPerMille() const { return runTicks_ ? static_cast<uint16_t>(runLostTicks_ * 1000 / runTicks_) : 0; }
-  // Tras una vuelta guiada fallida baja la confianza del mapa; devuelve true si lo cambió.
-  bool penalizeMapIfGuidedRunFailed();
+  // Tras una vuelta guiada fallida marca la zona donde se salió como peligrosa
+  // y hace más lentas todas las curvas; devuelve true si cambió el mapa.
+  bool correctMapAfterFailedRun();
+  // Tramo del mapa donde empezó la racha más larga sin línea (dónde se salió).
+  uint16_t failureBin() const { return failureBin_; }
   RunMode mode() const { return mode_; }
   uint16_t currentBin() const;
   void requestStop(uint32_t nowMs);
@@ -81,6 +84,7 @@ class LineFollower {
   void onGapEntered();
   void recordCurvature();
   void trackLineLoss(uint32_t nowMs);
+  void noteHowRunEnded(uint32_t nowMs);
 
   LineSensorArray& sensors_;
   IDrivetrain& drivetrain_;
@@ -98,6 +102,10 @@ class LineFollower {
   uint32_t runLostTicks_ = 0;
   uint32_t lostSinceMs_ = 0;
   uint32_t longestLostMs_ = 0;
+  uint16_t lostStartBin_ = 0;
+  uint16_t failureBin_ = 0;
+  bool stoppedWhileLost_ = false;
+  bool stoppedIncomplete_ = false;
   bool bridging_ = false;
   bool recovering_ = false;
 

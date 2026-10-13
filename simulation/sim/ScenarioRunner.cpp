@@ -8,6 +8,9 @@
 #include <string>
 
 #include "AtlasApp.h"
+#include "LogExporter.h"
+#include "RunLog.h"
+#include "TrackMapStore.h"
 #include "TrackMap.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
@@ -26,6 +29,15 @@ constexpr double kStoppedSpeed = 0.05;
 constexpr double kStopCheckDelayS = 1.5;
 
 // Une el paso del tiempo virtual con la física, el operador y el árbitro.
+// Acumula el texto exportado por el firmware.
+class StringSink : public atlas::ITextSink {
+ public:
+  void text(const char* value) override { buffer += value; }
+  void number(int32_t value) override { buffer += std::to_string(value); }
+  void endLine() override { buffer += "\n"; }
+  std::string buffer;
+};
+
 // EEPROM simulada del robot: conserva calibración y mapa entre intentos.
 class SimEeprom : public atlas::IPersistentStorage {
  public:
@@ -168,6 +180,15 @@ std::vector<ScenarioResult> ScenarioRunner::runAttempts(const TrackEntry& entry,
       monitors.emplace_back(new RaceMonitor(entry.track, startArcLength, entry.laps));
       op.nextAttempt(*monitors.back(), clock.seconds());
     }
+  }
+  if (spec.learnTrack) {
+    // Lo mismo que el modo diagnóstico enviaría por serial al terminar.
+    atlas::TrackMap stored;
+    atlas::TrackMapStore(eeprom).load(stored);
+    atlas::RunLog log(eeprom);
+    StringSink sink;
+    atlas::exportRunLog(sink, log, stored);
+    results.back().robotLog = sink.buffer;
   }
   const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - wallStart).count();
   for (ScenarioResult& r : results) r.wallSeconds = wall / results.size();

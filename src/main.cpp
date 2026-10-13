@@ -68,7 +68,7 @@ AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kSafeConfig.mo
 
 LineSensorArray sensors(sensorBus, kSafeConfig.sensors);
 LineFollower follower(sensors, drivetrain, kSafeConfig);
-AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kSafeConfig);
+AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kSafeConfig, &eeprom, &trackMap);
 
 AppOptions makeAppOptions() {
   AppOptions options;

@@ -3,6 +3,7 @@
 namespace atlas {
 
 void TrackMap::clear() {
+  curveSpeedPercent_ = 100;
   length_ = 0;
   gapCount_ = 0;
   valid_ = false;
@@ -62,8 +63,21 @@ int32_t TrackMap::nearestGap(uint16_t bin, uint16_t window) const {
   return best;
 }
 
-void TrackMap::restore(uint16_t length, uint8_t gapCount, uint16_t lostPerMille) {
+void TrackMap::markDangerZone(uint16_t bin, uint8_t before, uint8_t after, uint8_t boost) {
+  const uint16_t first = bin > before ? bin - before : 0;
+  for (uint16_t i = first; i <= bin + after && i < length_; i++) {
+    const uint16_t raised = static_cast<uint16_t>(bins_[i]) + boost;
+    bins_[i] = raised > 255 ? 255 : static_cast<uint8_t>(raised);
+  }
+}
+
+void TrackMap::reduceCurveSpeed(uint8_t step, uint8_t minimum) {
+  curveSpeedPercent_ = curveSpeedPercent_ > minimum + step ? curveSpeedPercent_ - step : minimum;
+}
+
+void TrackMap::restore(uint16_t length, uint8_t gapCount, uint16_t lostPerMille, uint8_t curveSpeedPercent) {
   lostPerMille_ = lostPerMille;
+  curveSpeedPercent_ = curveSpeedPercent > 100 ? 100 : curveSpeedPercent;
   length_ = length > kMaxMapBins ? kMaxMapBins : length;
   gapCount_ = gapCount > kMaxMapGaps ? kMaxMapGaps : gapCount;
   valid_ = length_ > 0;

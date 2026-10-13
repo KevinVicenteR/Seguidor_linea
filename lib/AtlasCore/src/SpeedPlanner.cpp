@@ -4,10 +4,10 @@
 
 namespace atlas {
 
-int16_t SpeedPlanner::limitFor(uint8_t curvature) const {
+int16_t SpeedPlanner::limitFor(uint8_t curvature, uint8_t curveSpeedPercent) const {
   const PlannerConfig& c = *config_;
   if (curvature <= c.straightCurvature) return c.maxPwm;
-  const float limit = c.fullTurnPwm * sqrtf(255.0f / curvature);
+  const float limit = c.fullTurnPwm * sqrtf(255.0f / curvature) * curveSpeedPercent / 100.0f;
   return limit > c.maxPwm ? c.maxPwm : static_cast<int16_t>(limit);
 }
 
@@ -27,7 +27,8 @@ int16_t SpeedPlanner::speedAt(const TrackMap& map, uint16_t bin) const {
     const uint16_t j = bin + ahead;
     if (j >= map.length()) break;
     // Velocidad que permite llegar al tramo j sin pasarse de su límite.
-    const int32_t allowed = limitFor(map.curvature(j)) + static_cast<int32_t>(c.brakePwmPerBin) * ahead;
+    const int32_t allowed =
+        limitFor(map.curvature(j), map.curveSpeedPercent()) + static_cast<int32_t>(c.brakePwmPerBin) * ahead;
     if (allowed < best) best = allowed;
   }
   return static_cast<int16_t>(best * confidencePercent(map) / 100);

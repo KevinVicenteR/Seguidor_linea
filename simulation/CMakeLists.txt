@@ -11,7 +11,8 @@ target_compile_options(atlas_sim_lib PRIVATE -Wall -Wextra)
 add_executable(atlas_sim sim/main.cpp)
 target_link_libraries(atlas_sim PRIVATE atlas_sim_lib Threads::Threads)
 target_compile_definitions(atlas_sim PRIVATE
-  ATLAS_VIEWER_TEMPLATE="${CMAKE_CURRENT_SOURCE_DIR}/viewer/viewer_template.html")
+  ATLAS_VIEWER_TEMPLATE="${CMAKE_CURRENT_SOURCE_DIR}/viewer/viewer_template.html"
+  ATLAS_ANALYZER_TEMPLATE="${CMAKE_CURRENT_SOURCE_DIR}/viewer/analyzer_template.html")
 
 file(GLOB ATLAS_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
 add_executable(atlas_tests ${ATLAS_TEST_SOURCES})

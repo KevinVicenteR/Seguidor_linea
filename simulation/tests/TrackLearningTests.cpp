@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "Hal.h"
+#include "RunLog.h"
 #include "SpeedPlanner.h"
 #include "TestFramework.h"
 #include "TrackMap.h"
@@ -112,4 +113,47 @@ TEST("SpeedPlanner: un reconocimiento difícil reduce la velocidad planeada") {
   EXPECT_EQ(planner.confidencePercent(easy), 100);
   EXPECT_EQ(planner.confidencePercent(hard), 100 - (60 - config.easyLostPerMille) * config.slowdownPerLostPerMille);
   EXPECT_TRUE(planner.speedAt(hard, 5) < planner.speedAt(easy, 5));
+}
+
+TEST("TrackMap: la zona donde se salió se marca como más cerrada") {
+  TrackMap map = straightWithCurveAt(70, 80);
+  map.markDangerZone(40, 10, 3, 90);
+  EXPECT_EQ(map.curvature(29), 0);  // antes de la zona
+  EXPECT_EQ(map.curvature(30), 90);
+  EXPECT_EQ(map.curvature(43), 90);
+  EXPECT_EQ(map.curvature(44), 0);  // después de la zona
+  map.markDangerZone(70, 0, 0, 90);
+  EXPECT_EQ(map.curvature(70), 255);  // no se pasa del máximo
+}
+
+TEST("SpeedPlanner: frena antes de una zona peligrosa") {
+  PlannerConfig config;
+  SpeedPlanner planner(config);
+  TrackMap map = straightWithCurveAt(200, 120);
+  const int16_t before = planner.speedAt(map, 25);
+  map.markDangerZone(40, 10, 3, 90);
+  EXPECT_TRUE(planner.speedAt(map, 25) < before);
+  EXPECT_TRUE(planner.speedAt(map, 35) < planner.speedAt(map, 25));
+}
+
+TEST("RunLog: guarda las últimas 8 carreras en orden") {
+  ArrayStorage eeprom;
+  RunLog log(eeprom);
+  EXPECT_EQ(log.count(), 0);
+  for (uint16_t i = 1; i <= 10; i++) {
+    RunRecord record;
+    record.mode = 2;
+    record.failed = i == 9;
+    record.timeCentiseconds = 1000 + i;
+    record.failureBin = i * 10;
+    record.mapLength = 230;
+    log.append(record);
+  }
+  EXPECT_EQ(log.count(), RunLog::kCapacity);
+  EXPECT_EQ(log.at(0).timeCentiseconds, 1003);  // las 2 primeras se sobrescribieron
+  EXPECT_EQ(log.at(7).timeCentiseconds, 1010);
+  EXPECT_TRUE(log.at(6).failed);
+  EXPECT_EQ(log.at(6).failureBin, 90);
+  log.clear();
+  EXPECT_EQ(log.count(), 0);
 }

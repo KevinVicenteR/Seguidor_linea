@@ -386,7 +386,6 @@ TEST("Carrera guiada fallida: el siguiente intento sale más prudente") {
   calibrateApp(rig, app);
   runRace(rig, app, 4000);  // reconocimiento correcto
   EXPECT_TRUE(app.hasTrackMap());
-  const uint16_t before = map.lostPerMille();
 
   rig.bus.lineAt(7, 8);
   rig.panel.setGo(true);
@@ -397,8 +396,19 @@ TEST("Carrera guiada fallida: el siguiente intento sale más prudente") {
   for (uint64_t end = rig.clock.nowUs() + 1500 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
 
   EXPECT_TRUE(app.hasTrackMap());  // el mapa se conserva...
-  EXPECT_EQ(map.lostPerMille(), before + rig.config.planner.confidencePenaltyPerMille);  // ...con menos confianza
+  EXPECT_EQ(map.curveSpeedPercent(), 100 - rig.config.planner.curveSpeedStepPercent);  // ...con curvas más lentas
+  // ...y la zona donde se salió queda marcada como más cerrada.
+  const uint16_t failure = rig.follower.failureBin();
+  EXPECT_TRUE(map.curvature(failure) >= rig.config.planner.dangerCurvatureBoost);
+  // El registro guarda las dos carreras: reconocimiento correcto y guiada fallida.
+  RunLog log(eeprom);
+  EXPECT_EQ(log.count(), 2);
+  EXPECT_EQ(log.at(0).mode, static_cast<uint8_t>(RunMode::Mapping));
+  EXPECT_FALSE(log.at(0).failed);
+  EXPECT_EQ(log.at(1).mode, static_cast<uint8_t>(RunMode::MapGuided));
+  EXPECT_TRUE(log.at(1).failed);
+  EXPECT_EQ(log.at(1).failureBin, failure);
   TrackMap reloaded;
   EXPECT_TRUE(TrackMapStore(eeprom).load(reloaded));
-  EXPECT_EQ(reloaded.lostPerMille(), map.lostPerMille());
+  EXPECT_EQ(reloaded.curveSpeedPercent(), map.curveSpeedPercent());
 }

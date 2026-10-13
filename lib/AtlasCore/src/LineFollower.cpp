@@ -33,6 +33,10 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   runLostTicks_ = 0;
   longestLostMs_ = 0;
   lostSinceMs_ = nowMs;
+  lostStartBin_ = 0;
+  failureBin_ = 0;
+  stoppedWhileLost_ = false;
+  stoppedIncomplete_ = false;
   bridging_ = false;
 
   drivetrain_.enable();
@@ -58,6 +62,22 @@ void LineFollower::requestStop(uint32_t nowMs) {
   if (!running_ || stopping_) return;
   brakeRamp_.start(nowMs, config_->speed.stopBrakeMs, currentVelocity(nowMs), 0);
   stopping_ = true;
+  noteHowRunEnded(nowMs);
+}
+
+// Al quitar GO: si el robot estaba buscando la línea, se salió (el operador
+// lo detuvo antes del umbral de 1.5 s). Si era una vuelta guiada y no
+// recorrió casi todo el mapa, quedó incompleta.
+void LineFollower::noteHowRunEnded(uint32_t nowMs) {
+  const PlannerConfig& c = config_->planner;
+  stoppedWhileLost_ = recovering_ && nowMs - lostSinceMs_ >= c.stoppedWhileLostMs;
+  stoppedIncomplete_ = mode_ == RunMode::MapGuided && map_ != nullptr &&
+                       static_cast<uint32_t>(currentBin()) * 100 < static_cast<uint32_t>(map_->length()) * c.completedMapPercent;
+  if (stoppedWhileLost_) {
+    failureBin_ = lostStartBin_;
+  } else if (stoppedIncomplete_ && longestLostMs_ <= c.failedRunLostMs) {
+    failureBin_ = currentBin();
+  }
 }
 
 void LineFollower::update(uint32_t nowMs) {
@@ -101,20 +121,26 @@ void LineFollower::trackLineLoss(uint32_t nowMs) {
   runTicks_++;
   if (!recovering_) {
     lostSinceMs_ = nowMs;
+    lostStartBin_ = currentBin();
     return;
   }
   runLostTicks_++;
   const uint32_t lostMs = nowMs - lostSinceMs_;
-  if (lostMs > longestLostMs_) longestLostMs_ = lostMs;
+  if (lostMs > longestLostMs_) {
+    longestLostMs_ = lostMs;
+    failureBin_ = lostStartBin_;
+  }
 }
 
 bool LineFollower::runFailed() const {
-  return longestLostMs_ > config_->planner.failedRunLostMs;
+  return longestLostMs_ > config_->planner.failedRunLostMs || stoppedWhileLost_ || stoppedIncomplete_;
 }
 
-bool LineFollower::penalizeMapIfGuidedRunFailed() {
+bool LineFollower::correctMapAfterFailedRun() {
   if (mode_ != RunMode::MapGuided || map_ == nullptr || !runFailed()) return false;
-  map_->penalize(config_->planner.confidencePenaltyPerMille);
+  const PlannerConfig& c = config_->planner;
+  map_->markDangerZone(failureBin_, c.dangerZoneBinsBefore, c.dangerZoneBinsAfter, c.dangerCurvatureBoost);
+  map_->reduceCurveSpeed(c.curveSpeedStepPercent, c.minCurveSpeedPercent);
   return true;
 }
 

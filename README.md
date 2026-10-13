@@ -22,7 +22,13 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 | Falla en… | Qué hace el robot al quitar GO | Siguiente intento |
 |---|---|---|
 | Intento 1 (reconocimiento) | Descarta el mapa; LED2 da 4 destellos rápidos y LED0 + LED1 quedan **fijos** | Vuelve a ser de reconocimiento (considera bajar a PWM 90 con SW1) |
-| Intento 2 (con mapa) | Conserva el mapa pero baja su confianza (−40 % de velocidad en el plan) | Sale más prudente para asegurar la vuelta |
+| Intento 2 (con mapa) | Conserva el mapa, marca la zona donde se salió y baja 10 % la velocidad de las curvas | Frena antes en esa zona (ver abajo) |
+
+**Ver dónde se salió y corrección automática:**
+
+- Cuando un intento con mapa se sale, el robot anota el **tramo** donde perdió la línea y, sin que hagas nada, marca esa zona (≈1 m antes) como curva más cerrada y hace un 10 % más lentas todas las curvas (las rectas no cambian). El siguiente intento frena ahí. Si vuelve a salirse, corrige de nuevo.
+- También cuenta como salida quitar GO mientras el robot buscaba la línea, o una vuelta con mapa que no llegó al 95 % del recorrido.
+- Para **verlo**: conecta el USB-TTL, entra al modo diagnóstico (mantén SW1 al encender), elige **[4] REGISTRO** y copia el texto desde `ATLAS-REGISTRO` hasta `FIN`. Pégalo en `simulation_output/analizador.html`: dibuja tu pista con el mapa aprendido, los huecos detectados y una ✕ donde se salió cada intento, más la tabla de tiempos. El registro guarda las últimas 8 carreras (SW2 lo borra desde ese menú).
 
 **Cómo reiniciar:**
 
@@ -84,13 +90,14 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
   SpeedGovernor           Baja la velocidad al perder la línea, la recupera al ir limpio
   TrackMap, SpeedPlanner  Mapa aprendido y velocidad por tramo con anticipación
   CalibrationStore, TrackMapStore  Calibración y mapa en EEPROM
+  RunLog, LogExporter     Registro de las últimas carreras (dónde se salió) para el analizador
   Profiles                Perfiles Seguro (reconocimiento) y Rápido (con mapa)
   AtlasApp                Máquina de estados del manual (color → calibración → velocidad → READY → GO → fin)
   StatusLeds, Ramp        Utilidades
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         64 pruebas unitarias y de integración
+simulation/tests/         69 pruebas unitarias y de integración
 simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
@@ -105,7 +112,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1316 B de RAM (64 %) y 22.1 KB de Flash (72 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 1485 B de RAM (73 %) y 25.9 KB de Flash (84 %).
 
 ## Simulador y pruebas (CMake)
 

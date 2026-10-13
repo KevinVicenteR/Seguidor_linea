@@ -141,9 +141,16 @@ struct PlannerConfig {
 
   // Carrera fallida: más de este tiempo seguido sin línea (en vueltas buenas
   // la racha más larga es de ~0.2 s). Un reconocimiento fallido no guarda el
-  // mapa; una vuelta guiada fallida baja la confianza para el siguiente intento.
+  // mapa; una vuelta guiada fallida marca como peligrosa la zona donde el
+  // robot se salió (frena más ahí en el siguiente intento).
   uint16_t failedRunLostMs = 1500;
-  uint16_t confidencePenaltyPerMille = 40;  // = -40 % de velocidad con la pendiente por defecto
+  uint16_t stoppedWhileLostMs = 200;  // quitaron GO mientras buscaba la línea = se salió
+  uint8_t completedMapPercent = 95;   // vuelta guiada que no recorrió esto del mapa = incompleta
+  uint8_t dangerZoneBinsBefore = 10;        // ~1 m antes de donde perdió la línea
+  uint8_t dangerZoneBinsAfter = 3;
+  uint8_t dangerCurvatureBoost = 90;  // se suma a la curvatura de esos tramos
+  uint8_t curveSpeedStepPercent = 10;  // y todas las curvas van un 10 % más lentas
+  uint8_t minCurveSpeedPercent = 60;   // (las rectas no cambian)
 };
 
 struct RobotConfig {

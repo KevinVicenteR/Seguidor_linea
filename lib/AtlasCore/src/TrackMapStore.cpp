@@ -5,8 +5,8 @@ namespace atlas {
 constexpr uint16_t TrackMapStore::kBaseAddress;
 constexpr uint8_t TrackMapStore::kSignature;
 
-// Formato: firma, largo (2), ‰ sin línea (2), huecos (1), posiciones de
-// huecos (2 c/u), curvaturas (1 por tramo), suma de control.
+// Formato: firma, largo (2), ‰ sin línea (2), % velocidad de curva (1),
+// huecos (1), posiciones de huecos (2 c/u), curvaturas (1 por tramo), suma de control.
 void TrackMapStore::put(uint16_t offset, uint8_t value, uint8_t* checksum) {
   if (storage_.read(kBaseAddress + offset) != value) storage_.write(kBaseAddress + offset, value);
   *checksum ^= value;
@@ -26,6 +26,7 @@ void TrackMapStore::save(TrackMap& map) {
   put(offset++, map.length() >> 8, &checksum);
   put(offset++, map.lostPerMille() & 0xFF, &checksum);
   put(offset++, map.lostPerMille() >> 8, &checksum);
+  put(offset++, map.curveSpeedPercent(), &checksum);
   put(offset++, map.gapCount(), &checksum);
   for (uint8_t i = 0; i < map.gapCount(); i++) {
     put(offset++, map.gap(i) & 0xFF, &checksum);
@@ -44,6 +45,7 @@ bool TrackMapStore::load(TrackMap& map) {
   offset += 2;
   const uint16_t lostPerMille = get(offset, &checksum) | (static_cast<uint16_t>(get(offset + 1, &checksum)) << 8);
   offset += 2;
+  const uint8_t curveSpeedPercent = get(offset++, &checksum);
   const uint8_t gapCount = get(offset++, &checksum);
   if (length == 0 || length > kMaxMapBins || gapCount > kMaxMapGaps) return false;
 
@@ -57,7 +59,7 @@ bool TrackMapStore::load(TrackMap& map) {
     map.clear();
     return false;
   }
-  map.restore(length, gapCount, lostPerMille);
+  map.restore(length, gapCount, lostPerMille, curveSpeedPercent);
   return true;
 }
 

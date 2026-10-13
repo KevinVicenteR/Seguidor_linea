@@ -32,6 +32,7 @@
 #include "Hal.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
+#include "RunLog.h"
 #include "TrackMap.h"
 #include "TrackMapStore.h"
 #include "Ramp.h"
@@ -75,6 +76,7 @@ class AtlasApp {
   bool loadSavedCalibration();
   void forgetTrackMap();
   void saveTrackMapIfLearned();
+  void logRace();
   void startCalibration();
   void finishCalibration();
   void updateReadyIndicator();
@@ -103,6 +105,8 @@ class AtlasApp {
   LinearRamp preSpinRamp_;
   uint32_t lastControlUs_ = 0;
   uint16_t racesCompleted_ = 0;
+  uint32_t raceStartMs_ = 0;
+  uint32_t raceStopMs_ = 0;
 };
 
 }  // namespace atlas

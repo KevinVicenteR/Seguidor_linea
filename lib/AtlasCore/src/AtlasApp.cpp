@@ -96,8 +96,21 @@ void AtlasApp::saveTrackMapIfLearned() {
     if (storage_ != nullptr) TrackMapStore(*storage_).erase();
     return;
   }
-  const bool penalized = follower_.penalizeMapIfGuidedRunFailed();
-  if ((learned || penalized) && storage_ != nullptr) TrackMapStore(*storage_).save(*trackMap_);
+  const bool corrected = follower_.correctMapAfterFailedRun();
+  if ((learned || corrected) && storage_ != nullptr) TrackMapStore(*storage_).save(*trackMap_);
+}
+
+// Registra la carrera (tipo, tiempo, si falló y dónde) para el análisis.
+void AtlasApp::logRace() {
+  if (storage_ == nullptr) return;
+  RunRecord record;
+  record.mode = static_cast<uint8_t>(follower_.mode());
+  record.failed = follower_.runFailed();
+  const uint32_t centiseconds = (raceStopMs_ - raceStartMs_) / 10;
+  record.timeCentiseconds = centiseconds > 0xFFFF ? 0xFFFF : static_cast<uint16_t>(centiseconds);
+  record.failureBin = follower_.failureBin();
+  record.mapLength = trackMap_ != nullptr ? trackMap_->length() : 0;
+  RunLog(*storage_).append(record);
 }
 
 void AtlasApp::startCalibration() {
@@ -215,7 +228,9 @@ void AtlasApp::startRace() {
   const bool guided = hasTrackMap();
   follower_.useConfig(guided && fastConfig_ != nullptr ? *fastConfig_ : config_);
   const RunMode mode = trackMap_ == nullptr ? RunMode::Plain : (guided ? RunMode::MapGuided : RunMode::Mapping);
-  follower_.start(cruisePwm_, clock_.millis(), mode);
+  raceStartMs_ = clock_.millis();
+  raceStopMs_ = raceStartMs_;
+  follower_.start(cruisePwm_, raceStartMs_, mode);
   lastControlUs_ = clock_.micros();
   state_ = AppState::Running;
 }
@@ -229,7 +244,8 @@ void AtlasApp::run() {
 
   if (!input_.startGo() && !follower_.isStopping()) {
     leds_.setAll(false);
-    follower_.requestStop(clock_.millis());
+    raceStopMs_ = clock_.millis();
+    follower_.requestStop(raceStopMs_);
   }
 
   if (!follower_.isRunning()) finishRace();
@@ -243,6 +259,7 @@ void AtlasApp::finishRace() {
   drivetrain_.disable();
   clock_.delayMs(kStopSettleMs);
 
+  logRace();
   saveTrackMapIfLearned();
   racesCompleted_++;
   preSpinActive_ = false;
