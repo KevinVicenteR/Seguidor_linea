@@ -39,8 +39,12 @@ class LineFollower {
 
  private:
   int16_t currentVelocity(uint32_t nowMs) const;
+  void scaleCrossingHoldToSpeed(int16_t velocity);
   MotorCommand followLine(int16_t velocity, uint32_t nowMs);
   int16_t slowDownForCurve(int16_t velocity, int32_t error) const;
+  void detectCorner(int32_t error, uint32_t nowMs);
+  uint8_t cornerSpeedPercent(uint32_t nowMs) const;
+  int16_t scaleForCorner(int16_t pwm, uint32_t nowMs) const;
   MotorCommand recoverLine(uint32_t nowMs) const;
   bool isCrossingGap(uint32_t nowMs) const;
   MotorCommand bridgeGap(int16_t velocity) const;
@@ -63,6 +67,8 @@ class LineFollower {
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;
   uint32_t centeredSinceMs_ = 0;
+  uint32_t lastCornerMs_ = 0;
+  bool cornerSeen_ = false;
   bool centered_ = false;
   Side lastSide_ = Side::Left;
 

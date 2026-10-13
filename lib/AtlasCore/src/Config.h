@@ -39,21 +39,24 @@ struct SensorConfig {
   // La línea no puede desplazarse más que esto entre dos lecturas (750 us);
   // un salto mayor indica que otra línea se unió al grupo.
   uint16_t maxPositionJump = 1000;
-  // Límite de lecturas consecutivas manteniendo la posición (~110 ms).
-  uint8_t maxHeldReads = 150;
+  // Límite de lecturas consecutivas manteniendo la posición, definido a PWM
+  // de referencia; el seguidor lo escala con la velocidad para que equivalga
+  // siempre a la misma distancia (~30 cm), también a velocidad baja.
+  uint16_t maxHeldReads = 150;
+  int16_t heldReadsReferencePwm = 250;
 };
 
 struct ControlConfig {
-  float kp = 0.05f;
-  float kd = 1.2f;
+  float kp = 0.09f;
+  float kd = 1.15f;
   int16_t maxCorrectionPwm = 1000;
   // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
   uint8_t derivativeFilterShift = 2;
   // Frenado en curva: con la línea en el extremo de la barra la velocidad
   // crucero se reduce este porcentaje (proporcional al error). 0 = original.
-  uint8_t curveSlowdownPercent = 40;
+  uint8_t curveSlowdownPercent = 8;
   int16_t maxForwardPwm = 255;
-  int16_t maxBackwardPwm = -120;
+  int16_t maxBackwardPwm = -210;
   uint16_t loopPeriodUs = 750;
 };
 
@@ -74,8 +77,8 @@ struct ImpellerConfig {
 
 struct LostLineConfig {
   int16_t outerMotorPwm = 255;
-  int16_t innerMotorPwm = -120;
-  uint16_t innerBrakeMs = 35;
+  int16_t innerMotorPwm = -210;
+  uint16_t innerBrakeMs = 45;
   // Huecos en la línea: si se pierde la línea después de ir recto y centrado
   // (en una recta), el robot sigue recto hasta gapBridgeMs antes de buscarla
   // girando. En curvas, rizos y picos la línea nunca está centrada tanto tiempo.
@@ -84,12 +87,26 @@ struct LostLineConfig {
   uint16_t gapStraightMs = 60;        // tiempo centrado exigido antes del hueco
 };
 
+// Frenado anticipado en esquinas: la barra (18 cm delante del eje) detecta la
+// esquina antes que las ruedas; se reduce la velocidad mientras dura y luego
+// se recupera en rampa. Afecta también a la velocidad de búsqueda de línea.
+// Desactivado: con el optimizador (simulation/tools/atlas_tune) no mejoró la
+// precisión frente al frenado en curva proporcional al error.
+struct CornerConfig {
+  bool enabled = false;
+  int16_t triggerError = 3500;   // |error| que se considera esquina/curva cerrada
+  uint8_t speedPercent = 55;     // velocidad durante la esquina (% del crucero)
+  uint16_t holdMs = 40;          // se mantiene tras la última detección
+  uint16_t recoveryMs = 120;     // rampa de regreso a la velocidad crucero
+};
+
 struct RobotConfig {
   SensorConfig sensors;
   ControlConfig control;
   SpeedConfig speed;
   ImpellerConfig impeller;
   LostLineConfig lostLine;
+  CornerConfig corner;
   bool motorsEnabled = true;
 };
 

@@ -3,9 +3,10 @@
 namespace atlas {
 
 constexpr uint8_t LineSensorArray::kAdcMax;
+constexpr uint8_t LineSensorArray::kWidthWindow;
 
 LineSensorArray::LineSensorArray(ILineSensorBus& bus, const SensorConfig& config)
-    : bus_(bus), config_(config) {
+    : bus_(bus), config_(config), heldReadsLimit_(config.maxHeldReads) {
   resetCalibration();
 }
 
@@ -103,23 +104,72 @@ LineReading LineSensorArray::readLine() {
     return reading;
   }
 
+  rememberNearbyLines(reading);
+  const uint8_t width = cluster.last - cluster.first + 1;
+  const uint16_t intensity = clusterIntensity(cluster);
+  // Dos líneas unidas ocupan más sensores o reflejan más que una sola.
+  const bool merging =
+      otherLineNearby() && (width > normalWidth_ || intensity > normalIntensity_ + normalIntensity_ / 5);
+
   // En un cruce se mantiene la última posición: el robot sigue recto.
-  if (isAmbiguous(cluster, reading.position) && heldReads_ < config_.maxHeldReads) {
+  if ((merging || isAmbiguous(cluster, reading.position)) && heldReads_ < heldReadsLimit_) {
     reading.position = lastPosition_;
     reading.ambiguous = true;
     heldReads_++;
   } else {
     lastPosition_ = reading.position;
     heldReads_ = 0;
+    if (!otherLineNearby()) learnNormalShape(width, intensity);
   }
   wasOnLine_ = true;
   return reading;
+}
+
+// Lecturas desde que se vio otra línea (rama de un cruce o de un pico).
+void LineSensorArray::rememberNearbyLines(const LineReading& reading) {
+  if (reading.otherLineLeft || reading.otherLineRight) {
+    readsSinceOtherLine_ = 0;
+  } else if (readsSinceOtherLine_ < 0xFFFF) {
+    readsSinceOtherLine_++;
+  }
+}
+
+// Mientras otra línea está cerca (o acaba de unirse al grupo), cualquier
+// ensanchamiento respecto al ancho normal de la línea se trata como cruce.
+bool LineSensorArray::otherLineNearby() const { return readsSinceOtherLine_ <= heldReadsLimit_ / 4; }
+
+uint16_t LineSensorArray::clusterIntensity(Cluster cluster) const {
+  uint16_t sum = 0;
+  for (uint8_t i = cluster.first; i <= cluster.last; i++) sum += values_[i];
+  return sum;
+}
+
+// Forma normal de la línea sola = máximo de ancho e intensidad en las últimas
+// lecturas limpias (ocupa 2 o 3 sensores según cómo caiga sobre ellos).
+void LineSensorArray::learnNormalShape(uint8_t width, uint16_t intensity) {
+  if (width > windowWidth_) windowWidth_ = width;
+  if (intensity > windowIntensity_) windowIntensity_ = intensity;
+  if (width > normalWidth_) normalWidth_ = width;
+  if (intensity > normalIntensity_) normalIntensity_ = intensity;
+  if (++widthSamples_ >= kWidthWindow) {
+    normalWidth_ = windowWidth_;
+    normalIntensity_ = windowIntensity_;
+    windowWidth_ = 0;
+    windowIntensity_ = 0;
+    widthSamples_ = 0;
+  }
 }
 
 void LineSensorArray::resetTracking() {
   lastPosition_ = kLinePositionCenter;
   wasOnLine_ = false;
   heldReads_ = 0;
+  readsSinceOtherLine_ = 0xFFFF;
+  normalWidth_ = config_.maxLineWidthSensors;
+  windowWidth_ = 0;
+  widthSamples_ = 0;
+  normalIntensity_ = 3 * kAdcMax;
+  windowIntensity_ = 0;
 }
 
 // Grupo demasiado ancho para ser una sola línea, o salto imposible de posición.

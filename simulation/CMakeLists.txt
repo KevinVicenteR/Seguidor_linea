@@ -27,3 +27,7 @@ add_custom_target(simulate
   DEPENDS atlas_sim
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Simulando todas las pistas" USES_TERMINAL)
+
+# Optimizador de parámetros del firmware (no forma parte de ctest).
+add_executable(atlas_tune tools/atlas_tune.cpp)
+target_link_libraries(atlas_tune PRIVATE atlas_sim_lib Threads::Threads)

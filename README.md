@@ -34,7 +34,7 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         43 pruebas unitarias y de integración
+simulation/tests/         46 pruebas unitarias y de integración
 simulation/viewer/        Plantilla del visor HTML animado
 ```
 
@@ -48,7 +48,7 @@ Abre la carpeta en VS Code con la extensión **PlatformIO IDE**: aparecen los bo
 pio run -e atlas -t upload
 ```
 
-Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 657 B de RAM (32 %) y 14.1 KB de Flash (46 %).
+Para programar por la terminal UART con un convertidor USB-TTL usa el entorno `atlas_uart`. Consumo actual: 695 B de RAM (34 %) y 15.2 KB de Flash (50 %).
 
 ## Simulador y pruebas (CMake)
 
@@ -104,7 +104,7 @@ Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corrid
 
 ### Resultados actuales
 
-51/52 escenarios aprobados; ningún obligatorio falla. Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
+63/64 escenarios aprobados; ningún obligatorio falla (velocidades obligatorias: PWM 130, 160, 190 y 220). Todas las pistas que se completan lo hacen **en menos de 40 s**; el Gran Premio (35.5 m) tarda 17.3 s a PWM 160, 13.1 s a 220 y 12.0 s a 250.
 
 - En un barrido de 480 corridas (12 pistas × PWM 160–250 × 4 semillas de ruido) solo fallan 2 corridas del triángulo de rizos a PWM 240; el resto, incluida la pista de competencia, 0.
 - **Gran Premio sin impeller: falla a propósito** (muestra el efecto de la succión).
@@ -124,6 +124,25 @@ Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corrid
 11. El impeller sigue su rampa aunque el robot esté fuera de la línea (antes conservaba el último valor).
 12. Sensores sin calibrar (máx ≤ mín) nunca reportan línea, en vez de producir un umbral inválido.
 
+## Precisión y robustez (rama `feature/precision-alta-velocidad`)
+
+Validación con 1 536 corridas que el optimizador no vio (12 pistas × PWM 100–250 × 8 semillas de ruido):
+
+| | Fallas | Error p95 pistas suaves* | Error p95 pista de competencia |
+|---|---|---|---|
+| Antes (Kp 0.05, Kd 1.2) | 95 | 4–6 mm | 31 mm |
+| **Ahora** | **3** | **3.5–4.9 mm** | 30 mm |
+
+\* óvalo, chicanas, estrella, ocho y flor.
+
+- **Cruces a velocidad baja:** cuando otra línea se une a la que se sigue, el grupo de sensores se ensancha o refleja más; antes la posición se desviaba medio sensor y el derivativo daba un tirón hacia la rama equivocada (95 fallas a PWM 100–130). Ahora se detecta por ancho e intensidad y se mantiene el rumbo; el tiempo máximo manteniéndolo se escala con la velocidad.
+- **Parámetros** elegidos con `atlas_tune` (búsqueda aleatoria + refinamiento sobre PWM 100–250): Kp 0.09, Kd 1.15, filtro 1/4, frenado en curva 8 %, rueda interior a −210 durante 45 ms al buscar la línea.
+- **Frenado anticipado en esquinas** implementado (`CornerConfig`) pero desactivado: el optimizador no encontró mejora.
+- **Las 3 fallas** son en rizos con radio menor que el límite geométrico del robot (la barra está 18 cm delante del eje, así que no puede seguir de forma estable curvas de menos de ~18 cm): 2 en el Trébol (lazos de 11 cm, ahora prueba no obligatoria) y 1 en el triángulo de rizos, todas a PWM 100–110.
+- **Límite físico:** en esquinas vivas y picos la barra siempre se sale unos centímetros, por eso el p95 de la pista de competencia queda en ~30 mm; en tramos suaves la precisión es de 3–5 mm.
+
+Para volver a optimizar con otros pesos o pistas: `./build/simulation/atlas_tune [aleatorias] [refinamientos] [semilla]`.
+
 ## Oscilación
 
 El simulador mide la oscilación como **cruces de un lado a otro de la línea por metro** y el **esfuerzo de dirección** (RMS de la diferencia entre ruedas). Ajuste elegido tras barrer Kp, Kd y el filtro del derivativo:
@@ -131,7 +150,7 @@ El simulador mide la oscilación como **cruces de un lado a otro de la línea po
 | | Kp | Kd | Filtro | Cruces/m | Esfuerzo | Error RMS |
 |---|---|---|---|---|---|---|
 | Original | 0.05 | 0.35 | — | 1.79 | 46 PWM | 13.2 mm |
-| **Actual** | 0.05 | 1.2 | 1/4 | **0.81** | 44 PWM | 13.2 mm |
+| Rama de oscilación | 0.05 | 1.2 | 1/4 | 0.81 | 44 PWM | 13.2 mm |
 
 Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
 

@@ -22,6 +22,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs) {
   // Si arranca sobre un hueco, avanza recto hasta encontrar la línea.
   centered_ = true;
   centeredSinceMs_ = nowMs - config_.lostLine.gapStraightMs;
+  cornerSeen_ = false;
 }
 
 void LineFollower::requestStop(uint32_t nowMs) {
@@ -38,8 +39,9 @@ void LineFollower::update(uint32_t nowMs) {
     return;
   }
 
-  reading_ = sensors_.readLine();
   const int16_t velocity = currentVelocity(nowMs);
+  scaleCrossingHoldToSpeed(velocity);
+  reading_ = sensors_.readLine();
   if (reading_.isTrackable()) {
     command_ = followLine(velocity, nowMs);
   } else if (isCrossingGap(nowMs)) {
@@ -53,6 +55,15 @@ void LineFollower::update(uint32_t nowMs) {
   apply(command_);
 }
 
+// A menor velocidad el robot tarda más en atravesar un cruce: el tiempo
+// máximo manteniendo el rumbo crece en proporción inversa a la velocidad.
+void LineFollower::scaleCrossingHoldToSpeed(int16_t velocity) {
+  const SensorConfig& sensors = config_.sensors;
+  const int32_t speed = velocity < 50 ? 50 : velocity;
+  const int32_t reads = static_cast<int32_t>(sensors.maxHeldReads) * sensors.heldReadsReferencePwm / speed;
+  sensors_.setHeldReadsLimit(static_cast<uint16_t>(reads > 2000 ? 2000 : reads));
+}
+
 int16_t LineFollower::currentVelocity(uint32_t nowMs) const {
   return stopping_ ? brakeRamp_.valueAt(nowMs) : velocityRamp_.valueAt(nowMs);
 }
@@ -63,13 +74,42 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
 
   const int32_t error = static_cast<int32_t>(reading_.position) - kLinePositionCenter;
   trackStraightRun(error, nowMs);
+  detectCorner(error, nowMs);
   const int16_t correction = pd_.update(error);
-  const int16_t base = slowDownForCurve(velocity, error);
+  const int16_t base = slowDownForCurve(scaleForCorner(velocity, nowMs), error);
 
   MotorCommand command;
   command.left = base + correction;
   command.right = base - correction;
   return command;
+}
+
+// Señales de esquina: otra rama, grupo ancho (cruce/esquina viva), línea en
+// un extremo de la barra o error grande.
+void LineFollower::detectCorner(int32_t error, uint32_t nowMs) {
+  const CornerConfig& corner = config_.corner;
+  if (!corner.enabled) return;
+  const int32_t magnitude = error < 0 ? -error : error;
+  const bool cornerAhead = reading_.ambiguous || reading_.otherLineLeft || reading_.otherLineRight ||
+                           reading_.leftEdgeDetected || reading_.rightEdgeDetected || magnitude >= corner.triggerError;
+  if (cornerAhead) {
+    lastCornerMs_ = nowMs;
+    cornerSeen_ = true;
+  }
+}
+
+uint8_t LineFollower::cornerSpeedPercent(uint32_t nowMs) const {
+  const CornerConfig& corner = config_.corner;
+  if (!corner.enabled || !cornerSeen_) return 100;
+  const uint32_t since = nowMs - lastCornerMs_;
+  if (since <= corner.holdMs) return corner.speedPercent;
+  const uint32_t ramp = since - corner.holdMs;
+  if (ramp >= corner.recoveryMs) return 100;
+  return static_cast<uint8_t>(corner.speedPercent + (100 - corner.speedPercent) * ramp / corner.recoveryMs);
+}
+
+int16_t LineFollower::scaleForCorner(int16_t pwm, uint32_t nowMs) const {
+  return static_cast<int16_t>(static_cast<int32_t>(pwm) * cornerSpeedPercent(nowMs) / 100);
 }
 
 int16_t LineFollower::slowDownForCurve(int16_t velocity, int32_t error) const {
@@ -112,13 +152,14 @@ MotorCommand LineFollower::recoverLine(uint32_t nowMs) const {
   const LostLineConfig& lost = config_.lostLine;
   const bool innerBraking = nowMs - lastOnLineMs_ <= lost.innerBrakeMs;
   const int16_t inner = innerBraking ? lost.innerMotorPwm : 0;
+  const int16_t outer = scaleForCorner(lost.outerMotorPwm, nowMs);
 
   MotorCommand command;
   if (lastSide_ == Side::Left) {
     command.left = inner;
-    command.right = lost.outerMotorPwm;
+    command.right = outer;
   } else {
-    command.left = lost.outerMotorPwm;
+    command.left = outer;
     command.right = inner;
   }
   return command;

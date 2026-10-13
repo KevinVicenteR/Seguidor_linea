@@ -35,6 +35,7 @@ void RaceMonitor::update(double timeS, const RobotModel& robot, const DriveInput
   if (robot.isSliding()) slidingSamples_++;
   sumSquaredOffset_ += projection.distance * projection.distance;
   maxOffset_ = std::max(maxOffset_, projection.distance);
+  offsets_.push_back(static_cast<float>(projection.distance));
   maxSpeed_ = std::max(maxSpeed_, robot.speed());
 
   const double steering = (inputs.leftPwm - inputs.rightPwm) / 2.0;
@@ -112,6 +113,12 @@ void RaceMonitor::fillResult(ScenarioResult& result) const {
   result.maxSpeed = maxSpeed_;
   result.rmsOffsetMm = samples_ ? 1000.0 * std::sqrt(sumSquaredOffset_ / samples_) : 0.0;
   result.maxOffsetMm = 1000.0 * maxOffset_;
+  if (!offsets_.empty()) {
+    std::vector<float> sorted = offsets_;
+    const std::size_t k = sorted.size() * 95 / 100;
+    std::nth_element(sorted.begin(), sorted.begin() + k, sorted.end());
+    result.p95OffsetMm = 1000.0 * sorted[k];
+  }
   result.lostLinePercent = samples_ ? 100.0 * (samples_ - trackableSamples_) / samples_ : 0.0;
   result.slidingPercent = samples_ ? 100.0 * slidingSamples_ / samples_ : 0.0;
   result.steeringRmsPwm = samples_ ? std::sqrt(sumSquaredSteering_ / samples_) : 0.0;

@@ -100,7 +100,7 @@ std::string resultJson(const ScenarioResult& r) {
       << ",\"lapTimes\":" << jsonArray(r.lapTimes, [](double lap) { return number(lap, 3); })
       << ",\"raceTime\":" << number(r.raceTime, 3) << ",\"distance\":" << number(r.distance, 2)
       << ",\"avgSpeed\":" << number(r.averageSpeed, 3) << ",\"maxSpeed\":" << number(r.maxSpeed, 3)
-      << ",\"rmsOffsetMm\":" << number(r.rmsOffsetMm, 1) << ",\"maxOffsetMm\":" << number(r.maxOffsetMm, 1)
+      << ",\"rmsOffsetMm\":" << number(r.rmsOffsetMm, 1) << ",\"maxOffsetMm\":" << number(r.maxOffsetMm, 1) << ",\"p95OffsetMm\":" << number(r.p95OffsetMm, 1)
       << ",\"lostLinePct\":" << number(r.lostLinePercent, 1) << ",\"slidingPct\":" << number(r.slidingPercent, 1)
       << ",\"zigzagPerMeter\":" << number(r.zigzagPerMeter, 2) << ",\"steeringRms\":" << number(r.steeringRmsPwm, 1)
       << ",\"calibratedSensors\":" << r.calibratedSensors

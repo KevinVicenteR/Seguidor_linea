@@ -52,6 +52,7 @@ struct ScenarioResult {
   double maxSpeed = 0.0;
   double rmsOffsetMm = 0.0;
   double maxOffsetMm = 0.0;
+  double p95OffsetMm = 0.0;  // el 95 % del recorrido tiene un error menor que esto
   double lostLinePercent = 0.0;
   double slidingPercent = 0.0;
   double zigzagPerMeter = 0.0;   // cruces del robot de un lado a otro de la línea por metro

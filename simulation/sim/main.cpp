@@ -65,16 +65,21 @@ std::size_t findTrack(const std::vector<TrackEntry>& tracks, const std::string& 
   return 0;
 }
 
-// Alta velocidad: cada pista debe completarse en menos de 40 s a PWM 160,
-// 190 y 220. PWM 250 (el máximo del firmware) se reporta como prueba extrema.
+// Cada pista debe completarse en menos de 40 s a PWM 130 (arranque), 160, 190
+// y 220. PWM 250 (el máximo del firmware) se reporta como prueba extrema.
 std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, const Options& options) {
-  const std::vector<int16_t> requiredSpeeds = options.quick ? std::vector<int16_t>{190} : std::vector<int16_t>{160, 190, 220};
+  const std::vector<int16_t> requiredSpeeds = options.quick ? std::vector<int16_t>{190} : std::vector<int16_t>{130, 160, 190, 220};
   std::vector<ScenarioSpec> specs;
 
   for (std::size_t i = 0; i < tracks.size(); i++) {
     if (options.onlyTrack >= 0 && static_cast<int>(i) != options.onlyTrack) continue;
     const std::string& name = tracks[i].track.name();
-    for (int16_t pwm : requiredSpeeds) specs.push_back(makeSpec(i, name, pwm, true));
+    // Lazos más cerrados que la distancia barra-eje (~18 cm): el robot no los
+    // puede seguir de forma estable; se reportan pero no son obligatorios.
+    const bool beyondGeometry = name == "Trébol de lazos";
+    for (int16_t pwm : requiredSpeeds) {
+      specs.push_back(makeSpec(i, name, pwm, !beyondGeometry, beyondGeometry ? " (lazos < 18 cm)" : ""));
+    }
     if (!options.quick) specs.push_back(makeSpec(i, name, 250, false, " (extremo)"));
   }
   if (options.quick || options.onlyTrack >= 0) return specs;
@@ -122,13 +127,14 @@ std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const 
 }
 
 void printSummary(const std::vector<ScenarioResult>& results) {
-  std::printf("\n%-48s %6s %8s %8s %8s %8s %7s  %s\n", "Escenario", "Estado", "Tiempo", "v media", "v máx",
-              "err máx", "perdida", "Falla");
+  std::printf("\n%-48s %6s %8s %8s %8s %8s %8s %7s  %s\n", "Escenario", "Estado", "Tiempo", "v media", "v máx",
+              "err p95", "err máx", "perdida", "Falla");
   std::printf("%s\n", std::string(118, '-').c_str());
   for (const ScenarioResult& r : results) {
     const char* status = r.passed() ? "OK" : (r.spec.required ? "FALLA" : "falla*");
-    std::printf("%-48s %6s %7.2fs %6.2fm/s %6.2fm/s %6.0fmm %6.1f%%  %s\n", r.spec.label.c_str(), status, r.raceTime,
-                r.averageSpeed, r.maxSpeed, r.maxOffsetMm, r.lostLinePercent, r.failureReason.c_str());
+    std::printf("%-48s %6s %7.2fs %6.2fm/s %6.2fm/s %6.1fmm %6.0fmm %6.1f%%  %s\n", r.spec.label.c_str(), status,
+                r.raceTime, r.averageSpeed, r.maxSpeed, r.p95OffsetMm, r.maxOffsetMm, r.lostLinePercent,
+                r.failureReason.c_str());
   }
 }
 

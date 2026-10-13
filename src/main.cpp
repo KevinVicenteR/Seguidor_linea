@@ -34,11 +34,16 @@ constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 RobotConfig makeRobotConfig() {
   RobotConfig config;
 
-  config.control.kp = 0.05f;
-  config.control.kd = 1.2f;                // original: 0.35 (oscilaba más)
+  // Control PD optimizado en simulación para precisión a alta velocidad
+  // (simulation/tools/atlas_tune). Originales: kp 0.05, kd 0.35, sin filtro.
+  config.control.kp = 0.09f;
+  config.control.kd = 1.15f;
   config.control.derivativeFilterShift = 2;  // suaviza el derivativo (0 = sin filtro)
-  config.control.maxForwardPwm = 255;  // original: 200 (limitaba la velocidad a ~2.5 m/s)
-  config.control.maxBackwardPwm = -120;
+  config.control.curveSlowdownPercent = 8;   // frena en curva según el error
+  config.control.maxForwardPwm = 255;        // original: 200 (limitaba la velocidad a ~2.5 m/s)
+  config.control.maxBackwardPwm = -210;      // freno fuerte de la rueda interior al buscar la línea
+  config.lostLine.innerMotorPwm = -210;
+  config.lostLine.innerBrakeMs = 45;
 
   config.sensors.trackNearestCluster = true;  // cruces oblicuos y rizos; false = algoritmo original
 

@@ -173,3 +173,38 @@ TEST("Pico agudo: la rama que aparece a la derecha decide el giro") {
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.outerMotorPwm);
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.innerMotorPwm);
 }
+
+TEST("Esquina detectada: baja la velocidad y la recupera en rampa") {
+  Rig rig;
+  rig.config.control.curveSlowdownPercent = 0;
+  rig.config.corner.enabled = true;
+  rig.config.corner.speedPercent = 50;
+  rig.config.corner.holdMs = 40;
+  rig.config.corner.recoveryMs = 100;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(200, 0);
+  rig.follower.update(1000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;  // aparece otra rama: esquina adelante
+  rig.follower.update(1001);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 200);  // 50 %
+
+  rig.bus.lineAt(7, 8);
+  rig.follower.update(1001 + 40 + 50);  // a mitad de la rampa de regreso
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 300);
+  rig.follower.update(1001 + 40 + 100);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+}
+
+TEST("Frenado en esquinas desactivado: velocidad sin cambios") {
+  Rig rig;
+  rig.config.control.curveSlowdownPercent = 0;
+  rig.config.corner.enabled = false;
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;
+  rig.follower.start(200, 0);
+  rig.follower.update(1000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+}

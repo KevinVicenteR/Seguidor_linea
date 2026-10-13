@@ -104,6 +104,7 @@ ScenarioResult ScenarioRunner::run(const TrackEntry& entry, const ScenarioSpec& 
   app.begin();
   while (clock.seconds() < kHardLimitS) {
     app.tick();
+    if (observer_) observer_(clock.seconds(), sensors, follower, robot);
     clock.advanceUs(kLoopOverheadUs);
     if (op.hasReleasedGo() && app.racesCompleted() > 0) break;
   }

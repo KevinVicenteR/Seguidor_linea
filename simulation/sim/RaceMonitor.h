@@ -64,6 +64,7 @@ class RaceMonitor {
   int offsetSide_ = 0;
   long zigzags_ = 0;
   std::vector<TelemetrySample> telemetry_;
+  std::vector<float> offsets_;  // |error lateral| de cada muestra (para el percentil 95)
 };
 
 }  // namespace sim

@@ -133,3 +133,24 @@ TEST("Algoritmo original (sin seguimiento de grupo) promedia todo") {
   bus.values[12] = bus.values[13] = 30;
   EXPECT_EQ(sensors.readLine().position, 7500);
 }
+
+TEST("Cruce: la rama que se une al grupo no desvía la posición") {
+  test::FakeSensorBus bus;
+  SensorConfig config;
+  LineSensorArray sensors(bus, config);
+  calibrate(sensors, bus);
+  for (int i = 0; i < 40; i++) {  // aprende la forma normal de la línea (2 sensores)
+    bus.lineAt(7, 8);
+    sensors.readLine();
+  }
+  bus.lineAt(7, 8);
+  bus.values[11] = bus.values[12] = 30;  // se acerca otra línea por la derecha
+  EXPECT_EQ(sensors.readLine().position, kLinePositionCenter);
+  bus.lineAt(7, 9);  // se une: 3 sensores, la posición cruda saltaría a 8000
+  const LineReading merged = sensors.readLine();
+  EXPECT_TRUE(merged.ambiguous);
+  EXPECT_EQ(merged.position, kLinePositionCenter);
+  bus.lineAt(7, 8);
+  bus.values[4] = bus.values[5] = 30;  // la rama sale por la izquierda
+  EXPECT_EQ(sensors.readLine().position, kLinePositionCenter);
+}

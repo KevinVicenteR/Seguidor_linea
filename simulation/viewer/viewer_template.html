@@ -226,14 +226,14 @@ function renderList() {
 
 function renderMatrix() {
   const speeds = [...new Set(DATA.scenarios.filter((s) => s.label.split(' · ').length === 2 ||
-    s.label.endsWith('(extremo)')).map((s) => s.pwm))].sort((a, b) => a - b);
+    s.label.endsWith('(extremo)') || s.label.endsWith('cm)')).map((s) => s.pwm))].sort((a, b) => a - b);
   let html = '<tr><th>Pista</th><th>Largo</th><th>Radio mín.</th>' +
     speeds.map((p) => `<th>PWM ${p}${p > 220 ? ' *' : ''}</th>`).join('') + '</tr>';
   DATA.tracks.forEach((track, t) => {
     html += `<tr><td>${track.name}</td><td>${fmt(track.length, 1)} m</td><td>${track.minRadius < 0.04 ? 'esquina viva' : fmt(track.minRadius * 100, 0) + ' cm'}</td>`;
     speeds.forEach((pwm) => {
       const i = DATA.scenarios.findIndex((s) => s.track === t && s.pwm === pwm &&
-        (s.label.split(' · ').length === 2 || s.label.endsWith('(extremo)')));
+        (s.label.split(' · ').length === 2 || s.label.endsWith('(extremo)') || s.label.endsWith('cm)')));
       if (i < 0) { html += '<td>—</td>'; return; }
       const s = DATA.scenarios[i];
       html += `<td class="cell ${s.passed ? 'ok' : 'fail'}" data-i="${i}">${s.passed ? fmt(s.raceTime, 2) + ' s' : '✗ ' + (s.failure || 'falla')}</td>`;
@@ -283,6 +283,7 @@ function renderMetrics(s) {
     ['Velocidad media (pista)', fmt(s.avgSpeed, 2) + ' m/s'],
     ['Velocidad máxima', fmt(s.maxSpeed, 2) + ' m/s'],
     ['Error lateral RMS', fmt(s.rmsOffsetMm, 1) + ' mm'],
+    ['Error lateral p95', fmt(s.p95OffsetMm, 1) + ' mm'],
     ['Error lateral máx.', fmt(s.maxOffsetMm, 0) + ' mm'],
     ['Sin línea (recuperación)', fmt(s.lostLinePct, 1) + ' %'],
     ['Derrape', fmt(s.slidingPct, 1) + ' %'],
