@@ -37,7 +37,7 @@ constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 // Ajustes comunes a los dos perfiles. Las ganancias de control de cada perfil
 // están en lib/AtlasCore/src/Profiles.cpp (Seguro y Rápido).
 void applyUserSettings(RobotConfig& config) {
-  config.speed.basePwm = 100;
+  config.speed.basePwm = 130;
   config.speed.minPwm = 60;
   config.speed.maxPwm = 250;
   config.speed.stepPwm = 10;

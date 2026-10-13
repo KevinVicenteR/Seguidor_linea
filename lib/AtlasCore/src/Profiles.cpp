@@ -16,8 +16,8 @@ RobotConfig fastProfile() {
   config.control.curveSlowdownPercent = 0;  // el mapa ya decide la velocidad de cada tramo
   config.lostLine.outerMotorPwm = 201;
 
-  config.planner.maxPwm = 239;
-  config.planner.fullTurnPwm = 133;
+  config.planner.maxPwm = 255;
+  config.planner.fullTurnPwm = 180;
   config.planner.straightCurvature = 26;
   config.planner.brakePwmPerBin = 5;
   config.planner.lookaheadBins = 18;
