@@ -89,6 +89,8 @@ class AtlasApp {
   void startRace();
   void finishRace();
   bool recalibrationRequested();
+  bool lapResetRequested();
+  void returnToFirstLap();
 
   IClock& clock_;
   IOperatorInput& input_;
@@ -111,6 +113,10 @@ class AtlasApp {
   uint16_t racesCompleted_ = 0;
   uint32_t raceStartMs_ = 0;
   uint32_t raceStopMs_ = 0;
+  // Gesto del control remoto: pulsos de READY sin GO para volver a la vuelta 1.
+  bool readyWasOn_ = false;
+  uint8_t readyPulses_ = 0;
+  uint32_t firstReadyPulseMs_ = 0;
 };
 
 }  // namespace atlas

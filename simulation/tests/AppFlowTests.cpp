@@ -331,6 +331,61 @@ TEST("Recalibrar borra el mapa aprendido") {
   EXPECT_FALSE(TrackMapStore(eeprom).load(reloaded));
 }
 
+namespace {
+void pulseReady(AppRig& rig, AtlasApp& app, int pulses) {
+  for (int i = 0; i < pulses; i++) {
+    rig.panel.setReady(true);
+    for (int t = 0; t < 4000; t++) {  // 200 ms
+      app.tick();
+      rig.clock.advanceUs(50);
+    }
+    rig.panel.setReady(false);
+    for (int t = 0; t < 4000; t++) {
+      app.tick();
+      rig.clock.advanceUs(50);
+    }
+  }
+}
+}  // namespace
+
+TEST("PROGRAM del control 3 veces (READY sin GO): vuelve a la vuelta 1 y conserva la calibración") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  AppRig rig;
+  AppOptions options;
+  options.storage = &eeprom;
+  options.trackMap = &map;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  app.begin();
+  calibrateApp(rig, app);
+  runRace(rig, app, 4000);
+  EXPECT_TRUE(app.hasTrackMap());
+  pulseReady(rig, app, 3);
+  EXPECT_FALSE(app.hasTrackMap());
+  EXPECT_TRUE(app.state() == AppState::Ready);  // sin recalibrar
+  TrackMap reloaded;
+  EXPECT_FALSE(TrackMapStore(eeprom).load(reloaded));
+  EXPECT_TRUE(CalibrationStore(eeprom).load(rig.sensors));
+}
+
+TEST("Un READY normal antes de GO no borra el mapa") {
+  MemoryStorage eeprom;
+  TrackMap map;
+  AppRig rig;
+  AppOptions options;
+  options.storage = &eeprom;
+  options.trackMap = &map;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  app.begin();
+  calibrateApp(rig, app);
+  runRace(rig, app, 4000);
+  pulseReady(rig, app, 2);
+  EXPECT_TRUE(app.hasTrackMap());
+  rig.tickFor(6000);  // los pulsos viejos caducan
+  pulseReady(rig, app, 1);
+  EXPECT_TRUE(app.hasTrackMap());
+}
+
 TEST("Guardar la misma calibración otra vez no reescribe la EEPROM") {
   MemoryStorage eeprom;
   AppRig rig;
