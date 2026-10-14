@@ -7,8 +7,6 @@ constexpr uint16_t kUiBlinkMs = 250;
 constexpr uint16_t kConfirmHalfPeriodMs = 250;
 constexpr uint16_t kStopSettleMs = 500;
 constexpr uint16_t kFastIndicatorHalfPeriodMs = 300;
-constexpr uint8_t kLapResetPulses = 3;        // pulsos de READY (PROGRAM del control)
-constexpr uint16_t kLapResetWindowMs = 5000;  // deben caber en esta ventana
 }  // namespace
 
 AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators, LineSensorArray& sensors,
@@ -195,10 +193,6 @@ void AtlasApp::prepareToRun() {
     startCalibration();
     return;
   }
-  if (lapResetRequested()) {
-    returnToFirstLap();
-    return;
-  }
   updateImpellerPreSpin();
   adjustCruiseSpeed();
   updateReadyIndicator();
@@ -206,30 +200,6 @@ void AtlasApp::prepareToRun() {
 
 // SW1 + SW2 juntos en Ready: repetir la calibración sin presionar RESET.
 bool AtlasApp::recalibrationRequested() { return input_.button1() && input_.button2(); }
-
-// PROGRAM del control remoto (señal READY) 3 veces seguidas, sin dar GO, en
-// menos de kLapResetWindowMs: borrar el mapa y volver a la vuelta de
-// reconocimiento. Un READY normal antes de GO es un solo pulso.
-bool AtlasApp::lapResetRequested() {
-  const bool readyOn = input_.startReady();
-  const uint32_t now = clock_.millis();
-  const bool pulseEnded = readyWasOn_ && !readyOn;
-  readyWasOn_ = readyOn;
-  if (readyPulses_ > 0 && now - firstReadyPulseMs_ > kLapResetWindowMs) readyPulses_ = 0;
-  if (!pulseEnded) return false;
-  if (readyPulses_ == 0) firstReadyPulseMs_ = now;
-  readyPulses_++;
-  return readyPulses_ >= kLapResetPulses;
-}
-
-// Conserva la calibración y la velocidad; solo olvida el mapa.
-void AtlasApp::returnToFirstLap() {
-  readyPulses_ = 0;
-  drivetrain_.impeller().setPwm(0);
-  forgetTrackMap();
-  leds_.mapRejected();  // 4 destellos de LED2; luego LED0 + LED1 fijos = vuelta 1
-  updateReadyIndicator();
-}
 
 void AtlasApp::updateImpellerPreSpin() {
   const uint32_t now = clock_.millis();
@@ -268,7 +238,6 @@ void AtlasApp::adjustCruiseSpeed() {
 //  ---------------------------------------------------------------------------
 
 void AtlasApp::startRace() {
-  readyPulses_ = 0;
   drivetrain_.impeller().setPwm(0);
   leds_.setAll(true);
   const bool guided = hasTrackMap();
