@@ -51,7 +51,7 @@ struct SensorConfig {
 };
 
 struct ControlConfig {
-  float kp = 0.014f;  // suave pero con fuerza para curvas cerradas a alta velocidad
+  float kp = 0.008f;  // suave pero con fuerza para curvas cerradas a alta velocidad
   float kd = 1.0f;
   int16_t maxCorrectionPwm = 1000;
   // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
