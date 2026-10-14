@@ -236,7 +236,7 @@ void AtlasApp::updateImpellerPreSpin() {
 
   if (!config_.impeller.spinWithReady || !input_.startReady()) {
     preSpinActive_ = false;
-    leds_.set(Led::Led2, input_.startReady());  // LED2 = el robot recibe READY (PROGRAM)
+    leds_.set(Led::Led2, false);
     drivetrain_.impeller().setPwm(0);
     return;
   }
