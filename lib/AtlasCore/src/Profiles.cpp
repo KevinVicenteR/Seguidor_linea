@@ -15,6 +15,10 @@ RobotConfig fastProfile() {
   config.control.derivativeFilterShift = 1;
   config.control.curveSlowdownPercent = 0;  // el mapa ya decide la velocidad de cada tramo
   config.lostLine.outerMotorPwm = 201;
+  // Auto-amortiguación más sensible: a alta velocidad oscilaba un poco; detecta
+  // el zigzag con vaivenes más chicos (bajar Kp hacía que se saliera en curvas).
+  config.adaptive.oscillationAmplitude = 500;
+  config.adaptive.oscillationCrossings = 3;
 
   config.planner.maxPwm = 255;
   config.planner.fullTurnPwm = 250;  // con turbina 200 en las vueltas rápidas
