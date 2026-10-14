@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analizador ATLAS</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --panel-2: #eef0f3; --text: #1b1e24; --muted: #5f6672; --border: #d9dde3;
+    --accent: #2f6fde; --ok: #1f8a4c; --ok-bg: #e3f4ea; --fail: #c43c32; --fail-bg: #fbe7e5; --warn: #a86b00;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101216; --panel: #181b21; --panel-2: #20242b; --text: #e7e9ee; --muted: #9aa1ad; --border: #2c313a;
+      --accent: #6b9cff; --ok: #4cc283; --ok-bg: #173225; --fail: #ff7a6e; --fail-bg: #3a1c1a; --warn: #f0b546; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101216; --panel: #181b21; --panel-2: #20242b; --text: #e7e9ee; --muted: #9aa1ad; --border: #2c313a;
+    --accent: #6b9cff; --ok: #4cc283; --ok-bg: #173225; --fail: #ff7a6e; --fail-bg: #3a1c1a; --warn: #f0b546; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 14px 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  textarea { width: 100%; height: 260px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px; resize: vertical; }
+  button, select { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 11px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  canvas { display: block; width: 100%; height: min(60vh, 600px); border-radius: 8px; background: #f7f7f5; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  .ok { color: var(--ok); font-weight: 600; } .fail { color: var(--fail); font-weight: 600; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); align-items: center; }
+  .swatch { display: inline-block; width: 22px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+  .notice { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .error { color: var(--fail); font-size: 13px; margin-top: 6px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Analizador de carreras ATLAS</h1>
+  <p>Pega el texto del modo diagnóstico (opción [4] REGISTRO) para ver dónde se salió el robot y qué zonas corrigió.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Registro del robot</h2>
+    <p class="muted">Copia desde <code>ATLAS-REGISTRO</code> hasta <code>FIN</code>. Viene cargado un ejemplo simulado con fallas.</p>
+    <textarea id="log" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="primary" id="analyze">Analizar</button>
+      <button id="example">Cargar ejemplo</button>
+    </div>
+    <div class="row">
+      <label for="track" class="muted">Pista:</label>
+      <select id="track"></select>
+    </div>
+    <div id="parseError" class="error"></div>
+    <p class="notice">El robot no tiene encoders: la posición se estima con el tiempo y el PWM, y se escala para que el mapa ocupe una vuelta de la pista. Toma la ubicación como aproximada (±50 cm).</p>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <h2>2. Dónde se salió</h2>
+      <canvas id="canvas"></canvas>
+      <div class="legend">
+        <span><span class="swatch" style="background:#22c55e"></span>recta</span>
+        <span><span class="swatch" style="background:#eab308"></span>curva</span>
+        <span><span class="swatch" style="background:#ef4444"></span>curva cerrada / zona peligrosa</span>
+        <span>✕ salida de pista</span>
+        <span>● INICIO</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>3. Intentos</h2>
+      <table id="runs"></table>
+      <p class="muted" id="mapSummary"></p>
+    </section>
+  </div>
+</main>
+
+<script>
+const DATA = /*__SIM_DATA__*/null;
+const $ = (id) => document.getElementById(id);
+
+function parseLog(text) {
+  const runs = [], curvatures = [];
+  let map = null, gaps = [], started = false;
+  text.split(/\r?\n/).forEach((raw) => {
+    const parts = raw.trim().split(',');
+    switch (parts[0]) {
+      case 'ATLAS-REGISTRO': started = true; break;
+      case 'CARRERA':
+        runs.push({ n: +parts[1], mode: parts[2], failed: parts[3] === 'falla', time: +parts[4] / 100, failureBin: +parts[5], mapLength: +parts[6] });
+        break;
+      case 'MAPA': map = { length: +parts[1], lostPerMille: +parts[2], gaps: +parts[3], curveSpeed: parts[4] !== undefined ? +parts[4] : 100 }; break;
+      case 'HUECOS': gaps = parts.slice(1).filter((v) => v !== '').map(Number); break;
+      case 'CURVAS': {
+        const start = +parts[1];
+        parts.slice(2).forEach((v, i) => { curvatures[start + i] = +v; });
+        break;
+      }
+    }
+  });
+  if (!started) throw new Error('No encontré "ATLAS-REGISTRO". Copia el texto completo del monitor serial.');
+  return { runs, map, gaps, curvatures };
+}
+
+function trackGeometry(track) {
+  const pts = [];
+  for (let i = 0; i < track.points.length; i += 2) pts.push([track.points[i] / 1000, track.points[i + 1] / 1000]);
+  const cumulative = [0];
+  for (let i = 1; i <= pts.length; i++) {
+    const a = pts[i - 1], b = pts[i % pts.length];
+    cumulative.push(cumulative[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  return { pts, cumulative, length: cumulative[pts.length] };
+}
+
+function pointAt(geo, s) {
+  s = ((s % geo.length) + geo.length) % geo.length;
+  let lo = 0, hi = geo.pts.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (geo.cumulative[mid + 1] <= s) lo = mid + 1; else hi = mid; }
+  const a = geo.pts[lo], b = geo.pts[(lo + 1) % geo.pts.length];
+  const seg = geo.cumulative[lo + 1] - geo.cumulative[lo];
+  const f = seg > 0 ? (s - geo.cumulative[lo]) / seg : 0;
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+}
+
+function curvatureColor(c) {
+  if (c >= 200) return '#ef4444';
+  if (c >= 90) return '#f97316';
+  if (c >= 40) return '#eab308';
+  return '#22c55e';
+}
+
+function draw(parsed) {
+  const track = DATA.tracks[+$('track').value];
+  const geo = trackGeometry(track);
+  const canvas = $('canvas'), ctx = canvas.getContext('2d');
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * ratio;
+  canvas.height = canvas.clientHeight * ratio;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  geo.pts.forEach(([x, y]) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+  const margin = 0.3;
+  const scale = Math.min(canvas.width / (maxX - minX + 2 * margin), canvas.height / (maxY - minY + 2 * margin));
+  const X = (x) => (x - minX + margin) * scale + (canvas.width - (maxX - minX + 2 * margin) * scale) / 2;
+  const Y = (y) => canvas.height - ((y - minY + margin) * scale + (canvas.height - (maxY - minY + 2 * margin) * scale) / 2);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // pista (línea negra)
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = Math.max(2, track.lineWidth * scale);
+  ctx.beginPath();
+  geo.pts.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))));
+  ctx.closePath();
+  ctx.stroke();
+
+  const startArc = track.startArc || 0;
+  if (parsed && parsed.map && parsed.map.length > 0) {
+    // El mapa ocupa una vuelta: cada tramo mide largo_pista / tramos.
+    const binLength = geo.length / parsed.map.length;
+    ctx.lineWidth = Math.max(5, 9 * ratio);
+    for (let b = 0; b < parsed.map.length; b++) {
+      const c = parsed.curvatures[b] ?? 0;
+      ctx.strokeStyle = curvatureColor(c);
+      ctx.globalAlpha = 0.75;
+      const p0 = pointAt(geo, startArc + b * binLength), p1 = pointAt(geo, startArc + (b + 1) * binLength);
+      ctx.beginPath(); ctx.moveTo(X(p0[0]), Y(p0[1])); ctx.lineTo(X(p1[0]), Y(p1[1])); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // huecos detectados
+    parsed.gaps.forEach((g) => {
+      const p = pointAt(geo, startArc + g * binLength);
+      ctx.strokeStyle = '#2f6fde'; ctx.lineWidth = 3 * ratio;
+      ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 9 * ratio, 0, 2 * Math.PI); ctx.stroke();
+    });
+    // salidas de pista
+    parsed.runs.filter((r) => r.failed && r.failureBin >= 0).forEach((r) => {
+      const p = pointAt(geo, startArc + r.failureBin * binLength);
+      const x = X(p[0]), y = Y(p[1]), s = 11 * ratio;
+      ctx.strokeStyle = '#c43c32'; ctx.lineWidth = 4 * ratio;
+      ctx.beginPath(); ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s); ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s); ctx.stroke();
+      ctx.fillStyle = '#c43c32'; ctx.font = `bold ${13 * ratio}px system-ui`;
+      ctx.fillText(`Intento ${r.n}`, x + s + 4 * ratio, y - s);
+    });
+  }
+  // INICIO
+  const start = pointAt(geo, startArc);
+  ctx.fillStyle = '#2f6fde';
+  ctx.beginPath(); ctx.arc(X(start[0]), Y(start[1]), 7 * ratio, 0, 2 * Math.PI); ctx.fill();
+  ctx.font = `${12 * ratio}px system-ui`;
+  ctx.fillText('INICIO', X(start[0]) + 10 * ratio, Y(start[1]) + 4 * ratio);
+}
+
+function renderRuns(parsed) {
+  const track = DATA.tracks[+$('track').value];
+  const geo = trackGeometry(track);
+  const binLength = parsed.map && parsed.map.length ? geo.length / parsed.map.length : 0.1;
+  let html = '<tr><th>Intento</th><th>Tipo</th><th>Resultado</th><th>Tiempo</th><th>Dónde se salió</th></tr>';
+  parsed.runs.forEach((r) => {
+    const where = r.failed && r.failureBin >= 0 ? `tramo ${r.failureBin} (~${(r.failureBin * binLength).toFixed(1)} m desde el INICIO)` : '—';
+    html += `<tr><td>${r.n}</td><td>${r.mode === 'reconocimiento' ? 'Reconocimiento' : r.mode === 'mapa' ? 'Con mapa' : 'Normal'}</td>` +
+      `<td class="${r.failed ? 'fail' : 'ok'}">${r.failed ? 'Se salió' : 'Completó'}</td><td>${r.time.toFixed(2)} s</td><td>${where}</td></tr>`;
+  });
+  $('runs').innerHTML = html;
+  const m = parsed.map;
+  $('mapSummary').textContent = m && m.length
+    ? `Mapa: ${m.length} tramos (~${binLength.toFixed(2)} m c/u), ${parsed.gaps.length} huecos, ${(m.lostPerMille / 10).toFixed(1)} % del reconocimiento sin línea. ` +
+      `Velocidad en curvas: ${m.curveSpeed} %${m.curveSpeed < 100 ? ' (bajó por salidas anteriores)' : ''}.`
+    : 'No hay mapa guardado: el siguiente intento será de reconocimiento.';
+}
+
+function analyze() {
+  $('parseError').textContent = '';
+  try {
+    const parsed = parseLog($('log').value);
+    renderRuns(parsed);
+    draw(parsed);
+  } catch (e) {
+    $('parseError').textContent = e.message;
+    draw(null);
+  }
+}
+
+DATA.tracks.forEach((t, i) => {
+  const option = document.createElement('option');
+  option.value = i;
+  option.textContent = t.name;
+  $('track').appendChild(option);
+});
+$('track').value = Math.max(0, DATA.tracks.findIndex((t) => t.name === 'Pista de competencia'));
+$('log').value = DATA.exampleLog || '';
+$('analyze').onclick = analyze;
+$('example').onclick = () => { $('log').value = DATA.exampleLog || ''; analyze(); };
+$('track').onchange = analyze;
+window.addEventListener('resize', analyze);
+analyze();
+</script>
+</body>
+</html>

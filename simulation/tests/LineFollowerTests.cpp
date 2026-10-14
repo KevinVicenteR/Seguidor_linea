@@ -15,6 +15,12 @@ struct Rig {
   LineFollower follower{sensors, drivetrain, config};
 
   Rig() {
+    // Las pruebas de lógica miden el comando "puro": sin frenado en esquinas,
+    // sin impulso de arranque ni compensación de zona muerta (tienen sus pruebas).
+    config.corner.enabled = false;
+    config.speed.startKickMs = 0;
+    config.speed.startKickPwm = 0;
+    config.control.minMotorPwm = 0;
     sensors.resetCalibration();
     bus.fill(30);
     sensors.collectCalibrationSamples();
@@ -140,6 +146,21 @@ TEST("Hueco en una recta: sigue recto y no gira") {
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, 150);
 }
 
+TEST("Punteado: tras cruzar un hueco, un trozo corto de cinta no rompe la recta") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);  // recta antes del punteado
+  rig.bus.fill(220);
+  for (uint32_t t = 1101; t <= 1140; t++) rig.follower.update(t);  // primer hueco
+  rig.bus.lineAt(7, 8);
+  for (uint32_t t = 1141; t <= 1150; t++) rig.follower.update(t);  // trozo de 10 ms
+  rig.bus.fill(220);
+  rig.follower.update(1160);                                       // segundo hueco
+  EXPECT_TRUE(rig.follower.isBridging());
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.drivetrain.rightMotor.pwm);
+}
+
 TEST("Hueco más largo que gapBridgeMs: empieza a buscar la línea") {
   Rig rig;
   rig.bus.lineAt(7, 8);
@@ -172,4 +193,75 @@ TEST("Pico agudo: la rama que aparece a la derecha decide el giro") {
   rig.follower.update(1105);
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.outerMotorPwm);
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.innerMotorPwm);
+}
+
+TEST("Esquina detectada: baja la velocidad y la recupera en rampa") {
+  Rig rig;
+  rig.config.control.curveSlowdownPercent = 0;
+  rig.config.corner.enabled = true;
+  rig.config.corner.speedPercent = 50;
+  rig.config.corner.holdMs = 40;
+  rig.config.corner.recoveryMs = 100;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(200, 0);
+  rig.follower.update(1000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;  // aparece otra rama: esquina adelante
+  rig.follower.update(1001);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 200);  // 50 %
+
+  rig.bus.lineAt(7, 8);
+  rig.follower.update(1001 + 40 + 50);  // a mitad de la rampa de regreso
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 300);
+  rig.follower.update(1001 + 40 + 100);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+}
+
+TEST("Frenado en esquinas desactivado: velocidad sin cambios") {
+  Rig rig;
+  rig.config.control.curveSlowdownPercent = 0;
+  rig.config.corner.enabled = false;
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;
+  rig.follower.start(200, 0);
+  rig.follower.update(1000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm + rig.drivetrain.rightMotor.pwm, 400);
+}
+
+TEST("Impulso de arranque: sale con más fuerza y luego baja a la velocidad crucero") {
+  Rig rig;
+  rig.config.speed.startKickPwm = 130;
+  rig.config.speed.startKickMs = 200;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(60, 1000);
+  rig.follower.update(1010);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 130);  // impulso aunque la crucero sea 60
+  rig.follower.update(1200 + rig.config.speed.runRampMs + 10);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 60);
+}
+
+TEST("Compensación de zona muerta: un PWM bajo sí mueve el motor y 255 sigue siendo 255") {
+  Rig rig;
+  rig.config.control.minMotorPwm = 45;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(60, 0);
+  rig.follower.update(5000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 45 + 60 * (255 - 45) / 255);
+  rig.follower.requestStop(5000);
+  rig.follower.update(5600);  // ya detenido: cero sigue siendo cero
+  EXPECT_FALSE(rig.follower.isRunning());
+}
+
+TEST("La turbina se apaga en cuanto se pide el paro") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  rig.follower.update(500);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
+  rig.follower.requestStop(500);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
+  rig.follower.update(501);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
 }

@@ -58,6 +58,18 @@ class StatusLeds {
     for (uint8_t i = 0; i < 8; i++) blink(Led::Led2, 60);
   }
 
+  // Calibración aceptada pero con sensores dañados: 3 destellos lentos de LED2.
+  void damagedSensorsWarning() {
+    setAll(false);
+    for (uint8_t i = 0; i < 3; i++) blink(Led::Led2, 300);
+  }
+
+  // Reconocimiento fallido: el mapa no se guardó (4 destellos rápidos de LED2).
+  void mapRejected() {
+    setAll(false);
+    for (uint8_t i = 0; i < 4; i++) blink(Led::Led2, 80);
+  }
+
   void bootAnimation() {
     for (uint8_t i = 0; i < 10; i++) blink(Led::Led2, 25);
   }

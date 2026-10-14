@@ -12,11 +12,19 @@ constexpr double RaceOperator::kSweepAmplitude;
 constexpr double RaceOperator::kConfirmWaitS;
 constexpr double RaceOperator::kSpeedPressPeriodS;
 constexpr double RaceOperator::kReadyS;
+constexpr double RaceOperator::kRepositionS;
 
 RaceOperator::RaceOperator(SimOperatorPanel& panel, RobotModel& robot, RaceMonitor& monitor, const OperatorPlan& plan)
-    : panel_(panel), robot_(robot), monitor_(monitor), plan_(plan), pressesLeft_(std::abs(plan.speedPresses)) {
+    : panel_(panel), robot_(robot), monitor_(&monitor), plan_(plan), pressesLeft_(std::abs(plan.speedPresses)) {
   robot_.setHeld(true);
   holdAtLateralOffset(-kSweepAmplitude);
+}
+
+void RaceOperator::nextAttempt(RaceMonitor& monitor, double timeS) {
+  monitor_ = &monitor;
+  robot_.setHeld(true);
+  robot_.place(plan_.startPose);
+  enter(Phase::Reposition, timeS);
 }
 
 void RaceOperator::enter(Phase phase, double timeS) {
@@ -93,17 +101,24 @@ void RaceOperator::update(double timeS) {
       }
       break;
 
+    case Phase::Reposition:
+      if (elapsed >= kRepositionS) {
+        panel_.setReady(true);
+        enter(Phase::Ready, timeS);
+      }
+      break;
+
     case Phase::Ready:
       if (elapsed >= kReadyS) {
         panel_.setGo(true);
         robot_.setHeld(false);
-        monitor_.start(timeS);
+        monitor_->start(timeS);
         enter(Phase::Race, timeS);
       }
       break;
 
     case Phase::Race:
-      if (monitor_.isFinished() || monitor_.hasFailed() || elapsed >= plan_.raceTimeoutS) {
+      if (monitor_->isFinished() || monitor_->hasFailed() || elapsed >= plan_.raceTimeoutS) {
         panel_.setGo(false);
         panel_.setReady(false);
         enter(Phase::Done, timeS);

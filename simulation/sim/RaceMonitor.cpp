@@ -11,6 +11,7 @@ constexpr double RaceMonitor::kOffTrackGraceS;
 constexpr double RaceMonitor::kStallWindowS;
 constexpr double RaceMonitor::kStallMinProgress;
 constexpr double RaceMonitor::kTelemetryPeriodS;
+constexpr double RaceMonitor::kZigzagHysteresis;
 
 RaceMonitor::RaceMonitor(const Track& track, double startArcLength, int laps)
     : track_(track), laps_(laps), lastArcLength_(startArcLength) {}
@@ -34,7 +35,14 @@ void RaceMonitor::update(double timeS, const RobotModel& robot, const DriveInput
   if (robot.isSliding()) slidingSamples_++;
   sumSquaredOffset_ += projection.distance * projection.distance;
   maxOffset_ = std::max(maxOffset_, projection.distance);
+  offsets_.push_back(static_cast<float>(projection.distance));
   maxSpeed_ = std::max(maxSpeed_, robot.speed());
+
+  const double steering = (inputs.leftPwm - inputs.rightPwm) / 2.0;
+  sumSquaredSteering_ += steering * steering;
+  const int side = projection.signedOffset > kZigzagHysteresis ? 1 : (projection.signedOffset < -kZigzagHysteresis ? -1 : 0);
+  if (side != 0 && offsetSide_ != 0 && side != offsetSide_) zigzags_++;
+  if (side != 0) offsetSide_ = side;
 
   if (timeS >= nextTelemetryTime_) {
     nextTelemetryTime_ += kTelemetryPeriodS;
@@ -105,8 +113,16 @@ void RaceMonitor::fillResult(ScenarioResult& result) const {
   result.maxSpeed = maxSpeed_;
   result.rmsOffsetMm = samples_ ? 1000.0 * std::sqrt(sumSquaredOffset_ / samples_) : 0.0;
   result.maxOffsetMm = 1000.0 * maxOffset_;
+  if (!offsets_.empty()) {
+    std::vector<float> sorted = offsets_;
+    const std::size_t k = sorted.size() * 95 / 100;
+    std::nth_element(sorted.begin(), sorted.begin() + k, sorted.end());
+    result.p95OffsetMm = 1000.0 * sorted[k];
+  }
   result.lostLinePercent = samples_ ? 100.0 * (samples_ - trackableSamples_) / samples_ : 0.0;
   result.slidingPercent = samples_ ? 100.0 * slidingSamples_ / samples_ : 0.0;
+  result.steeringRmsPwm = samples_ ? std::sqrt(sumSquaredSteering_ / samples_) : 0.0;
+  result.zigzagPerMeter = result.distance > 0.0 ? zigzags_ / result.distance : 0.0;
   result.telemetry = telemetry_;
 }
 

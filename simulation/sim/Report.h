@@ -24,5 +24,8 @@ struct ReportContext {
 std::string buildReportJson(const ReportContext& context);
 void writeViewer(const std::string& templatePath, const std::string& outputPath, const ReportContext& context);
 void writeSummaryCsv(const std::string& outputPath, const ReportContext& context);
+// Analizador de registros del robot real (pegar la salida del modo diagnóstico).
+void writeAnalyzer(const std::string& templatePath, const std::string& outputPath,
+                   const std::vector<TrackEntry>& tracks, const std::string& exampleLog);
 
 }  // namespace sim

@@ -35,11 +35,15 @@ class LineSensorArray {
   void readCalibrated();
   LineReading readLine();
   void resetTracking();
+  void setHeldReadsLimit(uint16_t reads) { heldReadsLimit_ = reads; }
 
   void resetCalibration();
   void collectCalibrationSamples();
   void finishCalibration();
+  // Restaura una calibración guardada (mínimos y máximos por sensor).
+  void restoreCalibration(const uint8_t* minValues, const uint8_t* maxValues);
   uint8_t calibratedSensorCount() const;
+  bool isSensorCalibrated(uint8_t sensor) const { return max_[sensor] >= min_[sensor] + config_.minCalibrationSpan; }
   bool isCalibrationValid() const { return calibratedSensorCount() >= config_.requiredCalibratedSensors; }
 
   const uint8_t* values() const { return values_; }
@@ -57,9 +61,15 @@ class LineSensorArray {
 
   void readAveraged();
   uint8_t scaleToCalibratedRange(uint8_t sensor, uint8_t raw) const;
+  void fillDamagedSensors();
   LineReading weightedReading(Cluster cluster) const;
+  uint16_t clusterIntensity(Cluster cluster) const;
   Cluster nearestCluster() const;
   bool isAmbiguous(Cluster cluster, uint16_t position) const;
+  bool isReacquiring() const { return readsSinceReacquired_ <= config_.reacquireFreeReads; }
+  void rememberNearbyLines(const LineReading& reading);
+  bool otherLineNearby() const;
+  void learnNormalShape(uint8_t width, uint16_t intensity);
 
   ILineSensorBus& bus_;
   const SensorConfig& config_;
@@ -70,7 +80,16 @@ class LineSensorArray {
   uint8_t threshold_[kSensorCount] = {};
   uint16_t lastPosition_ = kLinePositionCenter;
   bool wasOnLine_ = false;
-  uint8_t heldReads_ = 0;
+  uint8_t readsSinceReacquired_ = 0;
+  uint16_t heldReads_ = 0;
+  uint16_t heldReadsLimit_;
+  uint16_t readsSinceOtherLine_ = 0xFFFF;
+  static constexpr uint8_t kWidthWindow = 32;
+  uint8_t normalWidth_ = 3;  // ancho (sensores) de la línea sola, medido sin otras líneas cerca
+  uint8_t windowWidth_ = 0;
+  uint8_t widthSamples_ = 0;
+  uint16_t normalIntensity_ = 3 * 255;  // suma de valores de una línea sola
+  uint16_t windowIntensity_ = 0;
 };
 
 }  // namespace atlas

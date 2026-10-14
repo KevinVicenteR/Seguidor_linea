@@ -166,6 +166,12 @@
       <div class="metrics" id="metrics"></div>
     </section>
 
+    <section class="card" id="learningCard" hidden>
+      <h2>Aprendizaje de pista (3 intentos)</h2>
+      <p class="desc">Intento 1: reconoce la pista con el perfil Seguro. Intentos 2 y 3: corren guiados por el mapa con el perfil Rápido. Haz clic en un tiempo para verlo.</p>
+      <div class="table-wrap"><table id="learning"></table></div>
+    </section>
+
     <section class="card">
       <h2>Matriz de resultados</h2>
       <p class="desc">Tiempo de carrera por pista y velocidad (PWM). Haz clic en una celda para verla.</p>
@@ -226,14 +232,14 @@ function renderList() {
 
 function renderMatrix() {
   const speeds = [...new Set(DATA.scenarios.filter((s) => s.label.split(' · ').length === 2 ||
-    s.label.endsWith('(extremo)')).map((s) => s.pwm))].sort((a, b) => a - b);
+    s.label.endsWith('(extremo)') || s.label.endsWith('cm)')).map((s) => s.pwm))].sort((a, b) => a - b);
   let html = '<tr><th>Pista</th><th>Largo</th><th>Radio mín.</th>' +
     speeds.map((p) => `<th>PWM ${p}${p > 220 ? ' *' : ''}</th>`).join('') + '</tr>';
   DATA.tracks.forEach((track, t) => {
     html += `<tr><td>${track.name}</td><td>${fmt(track.length, 1)} m</td><td>${track.minRadius < 0.04 ? 'esquina viva' : fmt(track.minRadius * 100, 0) + ' cm'}</td>`;
     speeds.forEach((pwm) => {
       const i = DATA.scenarios.findIndex((s) => s.track === t && s.pwm === pwm &&
-        (s.label.split(' · ').length === 2 || s.label.endsWith('(extremo)')));
+        (s.label.split(' · ').length === 2 || s.label.endsWith('(extremo)') || s.label.endsWith('cm)')));
       if (i < 0) { html += '<td>—</td>'; return; }
       const s = DATA.scenarios[i];
       html += `<td class="cell ${s.passed ? 'ok' : 'fail'}" data-i="${i}">${s.passed ? fmt(s.raceTime, 2) + ' s' : '✗ ' + (s.failure || 'falla')}</td>`;
@@ -249,6 +255,30 @@ function renderMatrix() {
   $('configNote').textContent = `Criterio: completar cada pista en menos de 40 s. * Prueba extrema (PWM máximo del firmware). Firmware: Kp ${c.kp}, Kd ${c.kd}, ` +
     `lazo ${c.loopPeriodUs} µs. Robot: ${c.sensorCount} sensores cada ${c.sensorPitch * 1000} mm, barra a ` +
     `${c.sensorBarAhead * 100} cm del eje, ${c.maxWheelSpeed} m/s a PWM 255.`;
+}
+
+function renderLearning() {
+  const rows = DATA.tracks.map((track, t) => {
+    const attempts = DATA.scenarios.map((s, i) => ({ s, i })).filter(({ s }) => s.track === t && s.label.includes('aprendizaje'));
+    return { track, attempts };
+  }).filter((row) => row.attempts.length);
+  if (!rows.length) return;
+  $('learningCard').hidden = false;
+  let html = '<tr><th>Pista</th><th>Intento 1 (reconoce)</th><th>Intento 2 (mapa)</th><th>Intento 3 (mapa)</th><th>Mejora</th></tr>';
+  rows.forEach(({ track, attempts }) => {
+    html += `<tr><td>${track.name}</td>`;
+    attempts.forEach(({ s, i }) => {
+      html += `<td class="cell ${s.passed ? 'ok' : 'fail'}" data-i="${i}">${s.passed ? fmt(s.raceTime, 2) + ' s' : '✗ ' + (s.failure || 'falla')}</td>`;
+    });
+    const first = attempts[0].s, best = attempts.slice(1).filter(({ s }) => s.passed).map(({ s }) => s.raceTime);
+    html += best.length && first.passed ? `<td>${fmt(100 * (1 - Math.min(...best) / first.raceTime), 0)} %</td>` : '<td>—</td>';
+    html += '</tr>';
+  });
+  $('learning').innerHTML = html;
+  $('learning').querySelectorAll('td.cell').forEach((cell) => cell.onclick = () => {
+    select(Number(cell.dataset.i));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 }
 
 //  ----- Selección y métricas -------------------------------------------------
@@ -283,9 +313,12 @@ function renderMetrics(s) {
     ['Velocidad media (pista)', fmt(s.avgSpeed, 2) + ' m/s'],
     ['Velocidad máxima', fmt(s.maxSpeed, 2) + ' m/s'],
     ['Error lateral RMS', fmt(s.rmsOffsetMm, 1) + ' mm'],
+    ['Error lateral p95', fmt(s.p95OffsetMm, 1) + ' mm'],
     ['Error lateral máx.', fmt(s.maxOffsetMm, 0) + ' mm'],
     ['Sin línea (recuperación)', fmt(s.lostLinePct, 1) + ' %'],
     ['Derrape', fmt(s.slidingPct, 1) + ' %'],
+    ['Oscilación (cruces/m)', fmt(s.zigzagPerMeter, 2)],
+    ['Esfuerzo de dirección', fmt(s.steeringRms, 0) + ' PWM'],
     ['Sensores calibrados', `${s.calibratedSensors}/16`],
     ['PWM crucero / impeller', `${s.pwm} / ${s.impeller}`],
   ];
@@ -531,6 +564,7 @@ document.addEventListener('keydown', (e) => {
 
 renderHeader();
 renderMatrix();
+renderLearning();
 const firstFailure = DATA.scenarios.findIndex((s) => !s.passed && s.required);
 select(Math.max(0, DATA.scenarios.findIndex((s) => s.track === 0 && s.pwm === 190)));
 if (firstFailure >= 0) state.playing = true;

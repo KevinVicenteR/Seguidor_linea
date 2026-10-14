@@ -16,58 +16,71 @@
 #include "AvrClock.h"
 #include "AvrDiagnostics.h"
 #include "AvrDrivetrain.h"
+#include "AvrEepromStorage.h"
 #include "AvrLineSensorBus.h"
 #include "AvrOperatorPanel.h"
 #include "Config.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
+#include "Profiles.h"
+#include "TrackMap.h"
 
 using namespace atlas;
 
-//  =============================
-//  U S E R   P A R A M E T E R S
-//  =============================
 
 constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
-RobotConfig makeRobotConfig() {
-  RobotConfig config;
 
-  config.control.kp = 0.05f;
-  config.control.kd = 0.35f;
-  config.control.maxForwardPwm = 255;  // original: 200 (limitaba la velocidad a ~2.5 m/s)
-  config.control.maxBackwardPwm = -120;
-
-  config.sensors.trackNearestCluster = true;  // cruces oblicuos y rizos; false = algoritmo original
-
-  config.speed.basePwm = 100;
+void applyUserSettings(RobotConfig& config) {
+  config.speed.basePwm = 170;
   config.speed.minPwm = 60;
   config.speed.maxPwm = 250;
   config.speed.stepPwm = 10;
   config.speed.runRampMs = 150;
 
-  config.impeller.pwm = 200;  // el manual recomienda no superar 215
+  config.impeller.pwm = 190;  
   config.impeller.runRampMs = 250;
+}
 
+RobotConfig makeConfig(RobotConfig profile) {
+  applyUserSettings(profile);
+  return profile;
+}
+
+// Vueltas 2 y 3 (con mapa): van más rápido, la turbina aprieta más para
+// tener agarre en las curvas.
+RobotConfig makeFastConfig() {
+  RobotConfig config = makeConfig(fastProfile());
+  config.impeller.pwm = 235;
   return config;
 }
 
-//  ===========================
-//  O B J E C T   W I R I N G
-//  ===========================
 
-const RobotConfig kConfig = makeRobotConfig();
+const RobotConfig kSafeConfig = makeConfig(safeProfile());  // 1er intento: reconocimiento
+const RobotConfig kFastConfig = makeFastConfig();  // intentos con mapa aprendido
 
 AvrClock robotClock;
 AvrOperatorPanel panel;
 AvrLineSensorBus sensorBus;
-AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kConfig.motorsEnabled);
+AvrEepromStorage eeprom;
+TrackMap trackMap;
+AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kSafeConfig.motorsEnabled);
 
-LineSensorArray sensors(sensorBus, kConfig.sensors);
-LineFollower follower(sensors, drivetrain, kConfig);
-AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kConfig);
-AtlasApp app(robotClock, panel, panel, sensors, drivetrain, follower, kConfig, &diagnostics);
+LineSensorArray sensors(sensorBus, kSafeConfig.sensors);
+LineFollower follower(sensors, drivetrain, kSafeConfig);
+AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kSafeConfig, &eeprom, &trackMap);
+
+AppOptions makeAppOptions() {
+  AppOptions options;
+  options.diagnostics = &diagnostics;
+  options.fastConfig = &kFastConfig;
+  options.storage = &eeprom;
+  options.trackMap = &trackMap;
+  return options;
+}
+
+AtlasApp app(robotClock, panel, panel, sensors, drivetrain, follower, kSafeConfig, makeAppOptions());
 
 void setup() {
   cli();

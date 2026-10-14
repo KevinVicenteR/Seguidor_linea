@@ -5,14 +5,13 @@ namespace atlas {
 namespace {
 constexpr uint16_t kUiBlinkMs = 250;
 constexpr uint16_t kConfirmHalfPeriodMs = 250;
-constexpr uint16_t kShutdownSettleMs = 2000;
-constexpr uint16_t kStandbyFlashMs = 50;
-constexpr uint16_t kStandbyPeriodMs = 1050;
+constexpr uint16_t kStopSettleMs = 500;
+constexpr uint16_t kFastIndicatorHalfPeriodMs = 300;
 }  // namespace
 
 AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators, LineSensorArray& sensors,
                    IDrivetrain& drivetrain, LineFollower& follower, const RobotConfig& config,
-                   IDiagnostics* diagnostics)
+                   const AppOptions& options)
     : clock_(clock),
       input_(input),
       leds_(indicators, clock),
@@ -20,8 +19,13 @@ AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators
       drivetrain_(drivetrain),
       follower_(follower),
       config_(config),
-      diagnostics_(diagnostics),
-      cruisePwm_(config.speed.basePwm) {}
+      diagnostics_(options.diagnostics),
+      fastConfig_(options.fastConfig),
+      storage_(options.storage),
+      trackMap_(options.trackMap),
+      cruisePwm_(config.speed.basePwm) {
+  follower_.attachTrackMap(trackMap_);
+}
 
 void AtlasApp::begin() {
   leds_.bootAnimation();
@@ -31,7 +35,34 @@ void AtlasApp::begin() {
     leds_.confirm(500, 1);
     diagnostics_->run();
   }
-  state_ = AppState::WaitCalibration;
+  loadSavedSpeed();
+  state_ = loadSavedCalibration() ? AppState::Ready : AppState::WaitCalibration;
+}
+
+// Velocidad elegida la última vez con SW1/SW2 (si está dentro del rango).
+void AtlasApp::loadSavedSpeed() {
+  if (storage_ == nullptr) return;
+  int16_t saved = 0;
+  if (!SpeedSettingStore(*storage_).load(&saved)) return;
+  if (saved >= config_.speed.minPwm && saved <= config_.speed.maxPwm) cruisePwm_ = saved;
+}
+
+void AtlasApp::saveSpeed() {
+  if (storage_ != nullptr) SpeedSettingStore(*storage_).save(cruisePwm_);
+}
+
+// Usa la última calibración guardada si existe y sigue siendo válida.
+bool AtlasApp::loadSavedCalibration() {
+  if (storage_ == nullptr) return false;
+  if (!CalibrationStore(*storage_).load(sensors_) || !sensors_.isCalibrationValid()) {
+    sensors_.resetCalibration();
+    return false;
+  }
+  if (trackMap_ != nullptr && !TrackMapStore(*storage_).load(*trackMap_)) trackMap_->clear();
+  leds_.blink(Led::Led2, kUiBlinkMs);
+  leds_.blink(Led::Led2, kUiBlinkMs);
+  updateReadyIndicator();
+  return true;
 }
 
 void AtlasApp::tick() {
@@ -51,9 +82,6 @@ void AtlasApp::tick() {
     case AppState::Running:
       run();
       break;
-    case AppState::Finished:
-      showFinished();
-      break;
   }
 }
 
@@ -66,7 +94,40 @@ void AtlasApp::waitCalibration() {
   if (anyButton()) startCalibration();
 }
 
+// Una calibración nueva implica pista o lugar nuevo: el mapa ya no sirve.
+void AtlasApp::forgetTrackMap() {
+  if (trackMap_ == nullptr) return;
+  trackMap_->clear();
+  if (storage_ != nullptr) TrackMapStore(*storage_).erase();
+}
+
+void AtlasApp::saveTrackMapIfLearned() {
+  const bool wasMapping = follower_.mode() == RunMode::Mapping;
+  const bool learned = follower_.finishMapping();
+  if (wasMapping && !learned) {
+    leds_.mapRejected();
+    if (storage_ != nullptr) TrackMapStore(*storage_).erase();
+    return;
+  }
+  const bool corrected = follower_.correctMapAfterFailedRun();
+  if ((learned || corrected) && storage_ != nullptr) TrackMapStore(*storage_).save(*trackMap_);
+}
+
+// Registra la carrera (tipo, tiempo, si falló y dónde) para el análisis.
+void AtlasApp::logRace() {
+  if (storage_ == nullptr) return;
+  RunRecord record;
+  record.mode = static_cast<uint8_t>(follower_.mode());
+  record.failed = follower_.runFailed();
+  const uint32_t centiseconds = (raceStopMs_ - raceStartMs_) / 10;
+  record.timeCentiseconds = centiseconds > 0xFFFF ? 0xFFFF : static_cast<uint16_t>(centiseconds);
+  record.failureBin = follower_.failureBin();
+  record.mapLength = trackMap_ != nullptr ? trackMap_->length() : 0;
+  RunLog(*storage_).append(record);
+}
+
 void AtlasApp::startCalibration() {
+  forgetTrackMap();
   leds_.blink(Led::Led2, kUiBlinkMs);
   sensors_.resetCalibration();
   state_ = AppState::Calibrating;
@@ -100,12 +161,23 @@ void AtlasApp::finishCalibration() {
   }
 
   leds_.confirm(kConfirmHalfPeriodMs, 2);
-  leds_.showCalibrated();
+  if (sensors_.calibratedSensorCount() < kSensorCount) leds_.damagedSensorsWarning();
+  if (storage_ != nullptr) CalibrationStore(*storage_).save(sensors_);
+  updateReadyIndicator();
   clock_.delayMs(kUiBlinkMs);
   state_ = AppState::Ready;
 }
 
-void AtlasApp::restoreCalibratedIndicator() { leds_.showCalibrated(); }
+// Sin mapa (reconocimiento): LED0 + LED1 fijos. Con mapa (Rápido): alternados.
+void AtlasApp::updateReadyIndicator() {
+  if (!hasTrackMap()) {
+    leds_.showCalibrated();
+    return;
+  }
+  const bool phase = (clock_.millis() / kFastIndicatorHalfPeriodMs) % 2;
+  leds_.set(Led::Led0, phase);
+  leds_.set(Led::Led1, !phase);
+}
 
 //  ---------------------------------------------------------------------------
 //  Preparación: selección de velocidad y pre-giro del impeller con READY
@@ -116,14 +188,23 @@ void AtlasApp::prepareToRun() {
     startRace();
     return;
   }
+  if (recalibrationRequested()) {
+    drivetrain_.impeller().setPwm(0);
+    startCalibration();
+    return;
+  }
   updateImpellerPreSpin();
   adjustCruiseSpeed();
+  updateReadyIndicator();
 }
+
+// SW1 + SW2 juntos en Ready: repetir la calibración sin presionar RESET.
+bool AtlasApp::recalibrationRequested() { return input_.button1() && input_.button2(); }
 
 void AtlasApp::updateImpellerPreSpin() {
   const uint32_t now = clock_.millis();
 
-  if (!input_.startReady()) {
+  if (!config_.impeller.spinWithReady || !input_.startReady()) {
     preSpinActive_ = false;
     leds_.set(Led::Led2, false);
     drivetrain_.impeller().setPwm(0);
@@ -144,11 +225,11 @@ void AtlasApp::adjustCruiseSpeed() {
   if (input_.button1() && cruisePwm_ >= speed.minPwm + speed.stepPwm) {
     leds_.blink(Led::Led0, kUiBlinkMs);
     cruisePwm_ -= speed.stepPwm;
-    restoreCalibratedIndicator();
+    saveSpeed();
   } else if (input_.button2() && cruisePwm_ <= speed.maxPwm - speed.stepPwm) {
     leds_.blink(Led::Led1, kUiBlinkMs);
     cruisePwm_ += speed.stepPwm;
-    restoreCalibratedIndicator();
+    saveSpeed();
   }
 }
 
@@ -159,7 +240,12 @@ void AtlasApp::adjustCruiseSpeed() {
 void AtlasApp::startRace() {
   drivetrain_.impeller().setPwm(0);
   leds_.setAll(true);
-  follower_.start(cruisePwm_, clock_.millis());
+  const bool guided = hasTrackMap();
+  follower_.useConfig(guided && fastConfig_ != nullptr ? *fastConfig_ : config_);
+  const RunMode mode = trackMap_ == nullptr ? RunMode::Plain : (guided ? RunMode::MapGuided : RunMode::Mapping);
+  raceStartMs_ = clock_.millis();
+  raceStopMs_ = raceStartMs_;
+  follower_.start(cruisePwm_, raceStartMs_, mode);
   lastControlUs_ = clock_.micros();
   state_ = AppState::Running;
 }
@@ -173,26 +259,29 @@ void AtlasApp::run() {
 
   if (!input_.startGo() && !follower_.isStopping()) {
     leds_.setAll(false);
-    follower_.requestStop(clock_.millis());
+    raceStopMs_ = clock_.millis();
+    follower_.requestStop(raceStopMs_);
   }
 
-  if (!follower_.isRunning()) shutdown();
+  if (!follower_.isRunning()) finishRace();
 }
 
-void AtlasApp::shutdown() {
+// Detiene todo y vuelve a Ready conservando calibración y velocidad.
+void AtlasApp::finishRace() {
   drivetrain_.left().setPwm(0);
   drivetrain_.right().setPwm(0);
   drivetrain_.impeller().setPwm(0);
   drivetrain_.disable();
-  clock_.delayMs(kShutdownSettleMs);
-  finishedSinceMs_ = clock_.millis();
-  state_ = AppState::Finished;
+  clock_.delayMs(kStopSettleMs);
+
+  logRace();
+  saveTrackMapIfLearned();
+  racesCompleted_++;
+  preSpinActive_ = false;
+  leds_.setAll(false);
+  updateReadyIndicator();
+  state_ = AppState::Ready;
 }
 
-void AtlasApp::showFinished() {
-  const bool flash = (clock_.millis() - finishedSinceMs_) % kStandbyPeriodMs < kStandbyFlashMs;
-  leds_.set(Led::Led0, flash);
-  leds_.set(Led::Led1, flash);
-}
 
 }  // namespace atlas

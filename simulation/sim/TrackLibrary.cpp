@@ -208,6 +208,41 @@ TrackEntry competitionTrack() {
   return makeEntry(std::move(track), toMeters(240, 58));
 }
 
+// Pista de práctica del usuario: reproduce aproximadamente las dos zonas
+// donde el robot real se salía (foto del 2026-10-13): la "casa" (esquina hacia
+// adentro, pico agudo y diagonal) con un gancho en U, y las ondas con una U
+// profunda; curvas de 9-10 cm de radio. También tiene tramos punteados.
+TrackEntry practiceTrack() {
+  FilletedLoopBuilder b;
+  b.corner(0.0, 0.0, 0.25);
+  b.corner(2.6, 0.0, 0.30);
+  b.corner(2.6, 1.7, 0.30);
+  // Ondas: joroba hacia arriba y U profunda
+  b.corner(2.15, 1.7, 0.10).corner(2.00, 1.86, 0.09).corner(1.82, 1.86, 0.09);
+  b.corner(1.72, 1.48, 0.09).corner(1.52, 1.48, 0.09).corner(1.44, 1.7, 0.10);
+  // Casa: esquina hacia adentro, pico agudo, diagonal y esquina redondeada
+  b.corner(1.05, 1.7, 0.06).sharp(1.10, 1.30).sharp(0.85, 1.52).corner(0.45, 1.25, 0.05).corner(0.45, 1.00, 0.10);
+  // Gancho en U a la izquierda
+  b.corner(0.10, 1.00, 0.09).corner(0.10, 0.78, 0.09).corner(0.35, 0.78, 0.09);
+  b.sharp(0.35, 0.50);  // esquina seguida de un punteado (foto del 2026-10-13)
+
+  std::vector<TrackGap> gaps;
+  // Punteado justo después de la esquina: 15 cm de cinta y 3 huecos de 4.5 cm
+  // separados por segmentos de 7 cm, en la diagonal hacia (0, 0).
+  const Vec2 corner{0.35, 0.50};
+  const Vec2 diagonal = (Vec2{0.0, 0.0} - corner).normalized();
+  for (int k = 0; k < 3; k++) {
+    const double start = 0.15 + k * 0.115;
+    gaps.push_back({corner + diagonal * start, corner + diagonal * (start + 0.045)});
+  }
+  for (int k = 0; k < 4; k++) gaps.push_back({{1.0 + k * 0.08, 0.0}, {1.03 + k * 0.08, 0.0}});
+  for (int k = 0; k < 3; k++) gaps.push_back({{2.6, 0.7 + k * 0.08}, {2.6, 0.73 + k * 0.08}});
+  Track track("Pista de práctica",
+              "Zonas donde se salía el robot real: casa con pico agudo, gancho en U, ondas con U profunda, punteados y esquina seguida de punteado.",
+              b.build(), 0.020, gaps);
+  return makeEntry(std::move(track), {2.0, 0.0});
+}
+
 }  // namespace
 
 Vec2 competitionGapCenter() { return Vec2{337.5 * 3.66 / 995.0, (678.0 - 648.0) * 3.66 / 995.0}; }
@@ -215,6 +250,7 @@ Vec2 competitionGapCenter() { return Vec2{337.5 * 3.66 / 995.0, (678.0 - 648.0) 
 std::vector<TrackEntry> buildTrackLibrary() {
   std::vector<TrackEntry> library;
   library.push_back(competitionTrack());
+  library.push_back(practiceTrack());
   library.push_back(speedOval());
   library.push_back(longChicanes());
   library.push_back(figureHexagon());

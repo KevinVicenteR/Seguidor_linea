@@ -1,11 +1,22 @@
 #include "AvrDiagnostics.h"
 
+#include "LogExporter.h"
 #include "Ramp.h"
+#include "RunLog.h"
+#include "TrackMapStore.h"
 
 namespace atlas {
 
 namespace {
-constexpr uint8_t kTestCount = 4;
+constexpr uint8_t kTestCount = 5;
+
+// Envía el texto del registro por el puerto serial.
+class SerialSink : public ITextSink {
+ public:
+  void text(const char* value) override { Serial.print(value); }
+  void number(int32_t value) override { Serial.print(value); }
+  void endLine() override { Serial.println(); }
+};
 constexpr uint16_t kDebounceMs = 250;
 constexpr uint16_t kMotorOnMs = 400;
 constexpr uint16_t kMotorOffMs = 1000;
@@ -13,13 +24,16 @@ constexpr int16_t kMotorTestPwm = 60;
 }  // namespace
 
 AvrDiagnostics::AvrDiagnostics(IClock& clock, IOperatorInput& input, IIndicators& indicators,
-                               LineSensorArray& sensors, IDrivetrain& drivetrain, const RobotConfig& config)
+                               LineSensorArray& sensors, IDrivetrain& drivetrain, const RobotConfig& config,
+                               IPersistentStorage* storage, TrackMap* trackMap)
     : clock_(clock),
       input_(input),
       leds_(indicators, clock),
       sensors_(sensors),
       drivetrain_(drivetrain),
-      config_(config) {}
+      config_(config),
+      storage_(storage),
+      trackMap_(trackMap) {}
 
 void AvrDiagnostics::run() {
   Serial.begin(115200);
@@ -39,12 +53,15 @@ void AvrDiagnostics::run() {
       case 3:
         testUserInterface();
         break;
+      case 4:
+        exportRaceLog();
+        break;
     }
   }
 }
 
 uint8_t AvrDiagnostics::selectTest() {
-  Serial.println(F("[0] MOTORES  [1] IMPELLER  [2] SENSORES  [3] INTERFAZ"));
+  Serial.println(F("[0] MOTORES  [1] IMPELLER  [2] SENSORES  [3] INTERFAZ  [4] REGISTRO"));
   Serial.println(F("CONFIRMAR [SW1] / CAMBIAR [SW2]\n> 0"));
 
   uint8_t selection = 0;
@@ -157,6 +174,28 @@ void AvrDiagnostics::printRow(const __FlashStringHelper* label, const uint8_t* v
     Serial.print('\t');
   }
   Serial.println();
+}
+
+// Imprime el registro de carreras y el mapa. Copia todo el texto (de
+// ATLAS-REGISTRO a FIN) y pégalo en simulation_output/analizador.html.
+void AvrDiagnostics::exportRaceLog() {
+  if (storage_ == nullptr || trackMap_ == nullptr) {
+    Serial.println(F("Sin memoria para el registro."));
+    return;
+  }
+  TrackMapStore(*storage_).load(*trackMap_);
+  RunLog log(*storage_);
+  SerialSink sink;
+  Serial.println(F("--- copia desde ATLAS-REGISTRO hasta FIN ---"));
+  exportRunLog(sink, log, *trackMap_);
+  Serial.println(F("SW2 borra el registro de carreras; SW1 regresa al menu."));
+  while (!anyButton()) {
+  }
+  if (input_.button2()) {
+    log.clear();
+    Serial.println(F("Registro borrado."));
+  }
+  leds_.confirm(kDebounceMs, 1);
 }
 
 void AvrDiagnostics::testUserInterface() {

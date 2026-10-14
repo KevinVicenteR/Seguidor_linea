@@ -17,11 +17,14 @@ struct ScenarioSpec {
   int16_t cruisePwm = 100;
   atlas::LineColor lineColor = atlas::LineColor::Black;  // línea negra sobre fondo blanco
   int16_t impellerPwm = 200;
+  int16_t fastImpellerPwm = -1;  // turbina en intentos con mapa (-1: igual que impellerPwm)
   double sensorNoiseSigma = 4.0;
   uint32_t seed = 1;
   bool required = true;  // si falla, la simulación termina con error
   double timeLimitS = 40.0;  // la pista debe completarse antes de este tiempo
   bool customStart = false;  // salir desde startPoint en vez del INICIO de la pista
+  bool learnTrack = false;   // aprendizaje de pista: 1er intento reconoce, los demás usan el mapa
+  int attempts = 1;          // intentos seguidos (el operador regresa el robot a la salida)
   Vec2 startPoint;
   std::string label;
 };
@@ -52,15 +55,19 @@ struct ScenarioResult {
   double maxSpeed = 0.0;
   double rmsOffsetMm = 0.0;
   double maxOffsetMm = 0.0;
+  double p95OffsetMm = 0.0;  // el 95 % del recorrido tiene un error menor que esto
   double lostLinePercent = 0.0;
   double slidingPercent = 0.0;
+  double zigzagPerMeter = 0.0;   // cruces del robot de un lado a otro de la línea por metro
+  double steeringRmsPwm = 0.0;   // esfuerzo de dirección: RMS de (izquierda - derecha) / 2
   int calibratedSensors = 0;
   bool stoppedCleanly = false;
   double wallSeconds = 0.0;
+  std::string robotLog;  // registro exportado por el firmware (formato del modo diagnóstico)
 
   std::vector<TelemetrySample> telemetry;
 
-  bool passed() const { return completed && stoppedCleanly && calibratedSensors == atlas::kSensorCount; }
+  bool passed() const { return completed && stoppedCleanly && calibratedSensors >= atlas::kSensorCount - 2; }
 };
 
 }  // namespace sim
