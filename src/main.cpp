@@ -27,23 +27,19 @@
 
 using namespace atlas;
 
-//  =============================
-//  U S E R   P A R A M E T E R S
-//  =============================
 
 constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
-// Ajustes comunes a los dos perfiles. Las ganancias de control de cada perfil
-// están en lib/AtlasCore/src/Profiles.cpp (Seguro y Rápido).
+
 void applyUserSettings(RobotConfig& config) {
-  config.speed.basePwm = 130;
+  config.speed.basePwm = 200;
   config.speed.minPwm = 60;
   config.speed.maxPwm = 250;
   config.speed.stepPwm = 10;
   config.speed.runRampMs = 150;
 
-  config.impeller.pwm = 150;  // succión reducida (máx. recomendado por el manual: 215)
+  config.impeller.pwm = 215;  // succión reducida (máx. recomendado por el manual: 215)
   config.impeller.runRampMs = 250;
 }
 
@@ -56,13 +52,10 @@ RobotConfig makeConfig(RobotConfig profile) {
 // tener agarre en las curvas.
 RobotConfig makeFastConfig() {
   RobotConfig config = makeConfig(fastProfile());
-  config.impeller.pwm = 200;
+  config.impeller.pwm = 215;
   return config;
 }
 
-//  ===========================
-//  O B J E C T   W I R I N G
-//  ===========================
 
 const RobotConfig kSafeConfig = makeConfig(safeProfile());  // 1er intento: reconocimiento
 const RobotConfig kFastConfig = makeFastConfig();  // intentos con mapa aprendido
