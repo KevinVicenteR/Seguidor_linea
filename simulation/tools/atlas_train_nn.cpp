@@ -17,8 +17,8 @@
     Hexágono con 3 modelos de robot. Aptitud = tiempo + error p95 + zigzag,
     con fuerte castigo por salirse. Escribe NeuralGainWeights.h.
 
-  Uso: atlas_train_nn posicion [épocas]
-       atlas_train_nn control [generaciones]
+  Uso: atlas_train_nn posicion [lecturas]     (25000 por defecto)
+       atlas_train_nn control [competencias]   (25000 por defecto)
 */
 #include <algorithm>
 #include <atomic>
@@ -260,7 +260,20 @@ double* param(FloatNet& net, int k) {
   return &net.b2;
 }
 
-FloatNet train(const std::vector<Sample>& data, int epochs) {
+double validationRms(const FloatNet& net, const std::vector<Sample>& data, const std::vector<std::size_t>& indices) {
+  double sum = 0;
+  double hidden[kHidden];
+  for (std::size_t i : indices) {
+    const double error = net.forward(data[i].input, hidden) - data[i].target;
+    sum += error * error;
+  }
+  return std::sqrt(sum / std::max<std::size_t>(1, indices.size()));
+}
+
+// Entrena con `samples` lecturas al azar de las corridas de entrenamiento y se
+// detiene cuando el error de validación deja de bajar (se queda con la mejor
+// época, no con la última).
+FloatNet train(const std::vector<Sample>& data, std::size_t samples, int maxEpochs) {
   std::mt19937 random(7);
   FloatNet net;
   std::normal_distribution<double> init(0.0, 1.0);
@@ -271,22 +284,30 @@ FloatNet train(const std::vector<Sample>& data, int epochs) {
   }
   net.b2 = 0;
 
-  std::vector<std::size_t> order;
-  for (std::size_t i = 0; i < data.size(); i++)
-    if (!data[i].validation) order.push_back(i);
+  std::vector<std::size_t> order, check;
+  for (std::size_t i = 0; i < data.size(); i++) (data[i].validation ? check : order).push_back(i);
+  std::shuffle(order.begin(), order.end(), random);
+  std::shuffle(check.begin(), check.end(), random);
+  if (order.size() > samples) order.resize(samples);
+  if (check.size() > 100000) check.resize(100000);
+  std::printf("Entrenando con %zu lecturas; parada temprana con %zu lecturas de validación\n", order.size(),
+              check.size());
 
   std::vector<double> m(kParams, 0), v(kParams, 0), grad(kParams);
   const double beta1 = 0.9, beta2 = 0.999;
   long step = 0;
-  const std::size_t batch = 256;
-  for (int epoch = 0; epoch < epochs; epoch++) {
+  const std::size_t batch = 128;
+  double rate = 3e-3;
+  FloatNet best = net;
+  double bestRms = 1e9;
+  int bestEpoch = 0, sinceBest = 0, sinceDrop = 0;
+  for (int epoch = 0; epoch < maxEpochs; epoch++) {
     std::shuffle(order.begin(), order.end(), random);
-    const double rate = 3e-3 * std::pow(0.1, static_cast<double>(epoch) / epochs);
     double loss = 0;
-    for (std::size_t start = 0; start < order.size(); start += batch) {
+    for (std::size_t first = 0; first < order.size(); first += batch) {
       std::fill(grad.begin(), grad.end(), 0.0);
-      const std::size_t end = std::min(order.size(), start + batch);
-      for (std::size_t b = start; b < end; b++) {
+      const std::size_t last = std::min(order.size(), first + batch);
+      for (std::size_t b = first; b < last; b++) {
         const Sample& s = data[order[b]];
         double hidden[kHidden];
         const double error = net.forward(s.input, hidden) - s.target;
@@ -301,7 +322,7 @@ FloatNet train(const std::vector<Sample>& data, int epochs) {
         grad[kParams - 1] += error;
       }
       step++;
-      const double scale = 1.0 / static_cast<double>(end - start);
+      const double scale = 1.0 / static_cast<double>(last - first);
       for (int k = 0; k < kParams; k++) {
         const double g = grad[k] * scale;
         m[k] = beta1 * m[k] + (1 - beta1) * g;
@@ -311,11 +332,28 @@ FloatNet train(const std::vector<Sample>& data, int epochs) {
         *param(net, k) -= rate * mHat / (std::sqrt(vHat) + 1e-8);
       }
     }
-    if (epoch % 10 == 0 || epoch == epochs - 1) {
-      std::printf("  época %3d  RMS entrenamiento %.4f sensores\n", epoch, std::sqrt(loss / order.size()));
+    const double valRms = validationRms(net, data, check);
+    if (valRms < bestRms * 0.9995) {
+      bestRms = valRms;
+      best = net;
+      bestEpoch = epoch;
+      sinceBest = sinceDrop = 0;
+    } else {
+      sinceBest++;
+      if (++sinceDrop >= 40 && rate > 1e-5) {  // meseta: paso más fino
+        rate *= 0.5;
+        sinceDrop = 0;
+      }
     }
+    if (epoch % 50 == 0) {
+      std::printf("  época %4d  RMS entrenamiento %.4f  validación %.4f sensores  (paso %.1e)\n", epoch,
+                  std::sqrt(loss / order.size()), valRms, rate);
+      std::fflush(stdout);
+    }
+    if (sinceBest >= 200) break;  // ya no mejora
   }
-  return net;
+  std::printf("Mejor época %d: RMS de validación %.4f sensores (%.3f mm)\n", bestEpoch, bestRms, bestRms * 9.0);
+  return best;
 }
 
 //  ---------------------------------------------------------------------------
@@ -427,7 +465,7 @@ void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, st
       << "  NeuralPositionWeights.h - GENERADO por simulation/tools/atlas_train_nn.cpp\n"
       << "  (atlas_train_nn posicion). No editar a mano.\n\n"
       << "  Red " << kInputs << " -> " << kHidden << " ReLU -> 1: posición fina de la línea.\n"
-      << "  Entrenada el " << date << " con " << samples << " lecturas simuladas.\n"
+      << "  Entrenada el " << date << " con " << samples << " lecturas simuladas (parada temprana).\n"
       << "  Validación (posición, RMS en milésimas de sensor; 1000 = 9 mm):\n"
       << "    promedio ponderado " << std::lround(e.weighted) << ", red " << std::lround(e.quantized)
       << " (máx " << std::lround(e.maxQuantized) << ")\n"
@@ -448,14 +486,14 @@ void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, st
       << "}  // namespace neural\n}  // namespace atlas\n";
 }
 
-int trainPosition(int epochs) {
+int trainPosition(std::size_t samples) {
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
   const std::vector<Sample> data = buildDataset(tracks);
   std::size_t validation = 0;
   for (const Sample& s : data) validation += s.validation;
-  std::printf("Entrenamiento %zu, validación %zu\n", data.size() - validation, validation);
+  std::printf("Disponibles: entrenamiento %zu, validación %zu\n", data.size() - validation, validation);
 
-  const FloatNet net = train(data, epochs);
+  const FloatNet net = train(data, samples, 5000);
   const QuantNet q = quantize(net, data);
   const Errors train = evaluate(net, q, data, false);
   const Errors val = evaluate(net, q, data, true);
@@ -469,7 +507,7 @@ int trainPosition(int epochs) {
   std::printf("  shift1 %d  shift2 %d\n", q.shift1, q.shift2);
 
   const std::string path = std::string(ATLAS_SOURCE_DIR) + "/lib/AtlasCore/src/NeuralPositionWeights.h";
-  writeHeader(path, q, val, data.size());
+  writeHeader(path, q, val, std::min(samples, data.size() - validation));
   std::printf("Pesos escritos en %s\n", path.c_str());
   return 0;
 }
@@ -660,19 +698,44 @@ void writeGainHeader(const std::string& path, const Net& n, const Score& neutral
       << "}  // namespace neural\n}  // namespace atlas\n";
 }
 
-int train(int generations) {
+// Parámetros del optimizador que reproducen los pesos de NeuralGainWeights.h
+// (inverso de decode): el entrenamiento continúa desde la red actual.
+std::vector<double> currentTheta() {
+  std::vector<double> theta;
+  for (int i = 0; i < kHid * kIn; i++) theta.push_back(atlas::neural::kGainWeights1[i] / 24.0);
+  for (int i = 0; i < kHid; i++) theta.push_back(atlas::neural::kGainBias1[i] / 3000.0);
+  for (int i = 0; i < kOut * kHid; i++) theta.push_back(atlas::neural::kGainWeights2[i] / 24.0);
+  for (int i = 0; i < kOut; i++)
+    theta.push_back((atlas::neural::kGainBias2[i] - (100L << atlas::neural::kGainShift2)) / 2560.0);
+  return theta;
+}
+
+Score scoreOf(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases, const std::vector<double>& theta) {
+  const Net net = decode(theta);
+  const atlas::TinyMlpWeights view = net.view();
+  return evaluateAll(tracks, cases, {&view})[0];
+}
+
+int train(long budget) {
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
-  std::mt19937 random(11);
+  std::mt19937 random(23);
   std::normal_distribution<double> gauss(0.0, 1.0);
 
-  std::vector<double> theta(kParams, 0.0);
-  for (int i = 0; i < kHid * kIn; i++) theta[i] = gauss(random) * 0.7;  // capa oculta activa
-  for (int i = 0; i < kHid; i++) theta[kHid * kIn + i] = 0.2;           // salida en cero: empieza neutra
-
+  std::vector<double> theta = currentTheta();
   const int pairs = 8;
-  const double sigma = 0.35, rate = 0.06;
+  const double rate = 0.04;
   std::vector<double> m(kParams, 0), v(kParams, 0);
-  for (int g = 0; g < generations; g++) {
+
+  // Validación fija (todas las pistas, semillas que no se usan al entrenar).
+  const std::vector<Case> checkCases = makeCases(tracks, 70000, 1, true);
+  std::vector<double> best = theta;
+  double bestCost = scoreOf(tracks, checkCases, theta).cost;
+  std::printf("Inicio (red actual): costo de validación %.1f en %zu competencias\n", bestCost, checkCases.size());
+  long used = 0;
+  int checksWithoutGain = 0;
+  for (int g = 0; used < budget; g++) {
+    const double progress = static_cast<double>(used) / budget;
+    const double sigma = 0.30 * (1.0 - 0.6 * progress);  // exploración que se afina
     const std::vector<Case> cases = makeCases(tracks, 20000 + g * 7919, 1, false);
     std::vector<std::vector<double>> noise(pairs, std::vector<double>(kParams));
     std::vector<Net> nets;
@@ -684,15 +747,13 @@ int train(int generations) {
         nets.push_back(decode(candidate));
       }
     }
-    nets.push_back(decode(theta));
     std::vector<atlas::TinyMlpWeights> views;
     for (const Net& n : nets) views.push_back(n.view());
     std::vector<const atlas::TinyMlpWeights*> candidates;
     for (const atlas::TinyMlpWeights& w : views) candidates.push_back(&w);
-    candidates.push_back(nullptr);  // referencia: sin red de control
     const std::vector<Score> scores = evaluateAll(tracks, cases, candidates);
+    used += static_cast<long>(candidates.size() * cases.size());
 
-    // Rangos centrados (robusto al ruido) y gradiente antitético.
     std::vector<int> order(2 * pairs);
     for (int i = 0; i < 2 * pairs; i++) order[i] = i;
     std::sort(order.begin(), order.end(), [&](int a, int b) { return scores[a].cost < scores[b].cost; });
@@ -709,16 +770,30 @@ int train(int generations) {
       const double mHat = m[k] / (1 - std::pow(0.9, g + 1)), vHat = v[k] / (1 - std::pow(0.999, g + 1));
       theta[k] += rate * mHat / (std::sqrt(vHat) + 1e-8);
     }
-    const Score& center = scores[2 * pairs];
-    const Score& reference = scores[2 * pairs + 1];
-    std::printf("gen %2d  centro: costo %.1f (salidas %d)  sin red de control: %.1f (salidas %d)  mejor: %.1f\n", g,
-                center.cost, center.failures, reference.cost, reference.failures, scores[order[0]].cost);
+    std::printf("gen %3d  competencias %6ld/%ld  mejor candidato %.1f  peor %.1f  salidas %d\n", g, used, budget,
+                scores[order[0]].cost, scores[order[2 * pairs - 1]].cost, scores[order[0]].failures);
+
+    if (g % 10 == 9) {  // validación: ¿sigue mejorando?
+      const Score check = scoreOf(tracks, checkCases, theta);
+      const bool better = check.cost < bestCost - 0.5;
+      std::printf("  validación: costo %.1f (salidas %d)  mejor hasta ahora %.1f%s\n", check.cost, check.failures,
+                  bestCost, better ? "  <- nuevo mejor" : "");
+      if (better) {
+        bestCost = check.cost;
+        best = theta;
+        checksWithoutGain = 0;
+      } else if (++checksWithoutGain >= 4) {
+        std::printf("  40 generaciones sin mejorar en validación: se detiene.\n");
+        break;
+      }
+    }
     std::fflush(stdout);
   }
+  std::printf("Competencias de entrenamiento usadas: %ld\n", used);
 
-  // Validación con semillas nuevas en todas las pistas.
-  const Net best = decode(theta);
-  const atlas::TinyMlpWeights bestView = best.view();
+  // Validación final con otras semillas nuevas en todas las pistas.
+  const Net bestNet = decode(best);
+  const atlas::TinyMlpWeights bestView = bestNet.view();
   const std::vector<Case> validation = makeCases(tracks, 90000, 3, true);
   const std::vector<Score> result = evaluateAll(tracks, validation, {nullptr, &bestView});
   std::printf("\nValidación: %zu competencias de 3 intentos (todas las pistas, 3 modelos, semillas nuevas)\n",
@@ -727,7 +802,7 @@ int train(int generations) {
   printScore("con red de control", result[1]);
 
   const std::string path = std::string(ATLAS_SOURCE_DIR) + "/lib/AtlasCore/src/NeuralGainWeights.h";
-  writeGainHeader(path, best, result[0], result[1], static_cast<int>(validation.size()));
+  writeGainHeader(path, bestNet, result[0], result[1], static_cast<int>(validation.size()));
   std::printf("Pesos escritos en %s\n", path.c_str());
   return 0;
 }
@@ -738,8 +813,8 @@ int train(int generations) {
 
 int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
-  if (mode == "posicion") return trainPosition(argc > 2 ? std::atoi(argv[2]) : 60);
-  if (mode == "control") return gains::train(argc > 2 ? std::atoi(argv[2]) : 40);
-  std::fprintf(stderr, "Uso: atlas_train_nn posicion [épocas] | control [generaciones]\n");
+  if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
+  if (mode == "control") return gains::train(argc > 2 ? std::atol(argv[2]) : 25000);
+  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | control [competencias]\n");
   return 1;
 }

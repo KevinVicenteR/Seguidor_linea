@@ -3,9 +3,9 @@
   (atlas_train_nn posicion). No editar a mano.
 
   Red 7 -> 8 ReLU -> 1: posición fina de la línea.
-  Entrenada el 2026-10-15 con 2836989 lecturas simuladas.
+  Entrenada el 2026-10-15 con 25000 lecturas simuladas (parada temprana).
   Validación (posición, RMS en milésimas de sensor; 1000 = 9 mm):
-    promedio ponderado 146, red 59 (máx 649)
+    promedio ponderado 147, red 59 (máx 765)
 */
 #pragma once
 
@@ -21,21 +21,21 @@ constexpr uint8_t kPositionInputs = 7;
 constexpr uint8_t kPositionHidden = 8;
 
 ATLAS_PROGMEM const int8_t kPositionWeights1[kPositionHidden * kPositionInputs] = {
-    -38, -9, 34, 42, -20, -29, -29, 
-    -12, -9, 22, -20, -42, 44, 38, 
-    -7, 80, -88, 30, -71, -23, -19, 
-    25, -3, -46, -58, -16, 82, 15, 
-    -61, -15, 17, -67, -8, 15, -56, 
-    -36, 9, -52, 45, 39, 125, -34, 
-    -11, 112, 20, 50, -55, 127, -35, 
-    6, 3, -21, -72, -5, 60, 44};
+    -45, -3, 37, 54, 0, -72, -34, 
+    -15, -10, 26, -23, -49, 51, 45, 
+    -8, -69, -53, -16, -36, -2, -23, 
+    29, -3, -54, -68, -19, 96, 18, 
+    -71, -17, 19, -78, -9, 17, -66, 
+    -42, -58, -24, 83, 21, 32, -40, 
+    -13, 51, 15, 33, -46, 109, -41, 
+    7, 35, -40, -50, 45, 127, 51};
 ATLAS_PROGMEM const int32_t kPositionBias1[kPositionHidden] = {
-    1565, -62, 6971, 465, 843, 
-    -1563, -1751, 10059};
+    698, -82, 7454, 535, 988, 
+    27, -494, 6555};
 ATLAS_PROGMEM const int16_t kPositionWeights2[kPositionHidden] = {
-    -1382, 2277, 2547, -90, -5311, 3074, -2145, 2442};
+    -2672, 1518, 3891, 22, -4527, 2530, -2411, 1985};
 ATLAS_PROGMEM const int32_t kPositionBias2[1] = {
-    2822771};
+    1588102};
 
 const TinyMlpWeights kPositionNet = {kPositionInputs, kPositionHidden, 1,
                                      kPositionWeights1, kPositionBias1, 1,
