@@ -90,6 +90,21 @@ El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si s
 
 En tus pistas (práctica y competencia, configuración de `main.cpp`): 0 fallos con y sin red; con red, entre 0.1 y 0.5 s más rápido y error p95 igual o menor.
 
+### Fase 2: control (ajuste de ganancias en marcha)
+- **Qué hace:** una segunda red (6 entradas → 8 ReLU → 2 salidas) decide en cada lectura qué **porcentaje de kp y de kd** usar, entre **70 % y 130 %**. Sus entradas son el error, cuánto cambia, si se aleja o se acerca a la línea, la velocidad, la curva que viene según el mapa y la auto-amortiguación. **kp y kd no cambian** (siguen en `Config.h` / `Profiles.cpp`); la red solo los multiplica dentro de ese rango.
+- **Entrenamiento:** `atlas_train_nn control` usa evolución (estrategia evolutiva con muestreo antitético). Cada candidato corre los 3 intentos en las pistas de competencia, práctica, Gran Premio y Hexágono, con 3 modelos de robot y la configuración de `main.cpp`. Premia el tiempo, el error p95 y el zigzag, y castiga cada salida de pista. Escribe `lib/AtlasCore/src/NeuralGainWeights.h`.
+- **Validación (99 competencias con semillas nuevas, todas las pistas):** zigzag 1.60 → **1.32/m (−17 %)**, error p95 38 → 37 mm, tiempo medio 11.87 → 11.72 s, 0 salidas.
+
+| Robot "real", con las dos redes | Sin red | Con redes |
+|---|---|---|
+| Competencia, vueltas 2-3: tiempo / p95 / zigzag | 16.3 s / 60 mm / 3.9 | **15.8 s / 52 mm / 3.2** |
+| Práctica, vueltas 2-3: tiempo / p95 / zigzag | 11.4 s / 74 mm / 2.7 | 11.6 s / **61 mm** / 2.9 |
+| Todas las pistas (990 intentos) | 10 salidas | 1 salida |
+
+**Ojo:** las dos redes se entrenaron en el simulador. En el robot real conviene probar primero con `kUseNeuralNetwork = true` y, si se porta peor, regresar a `false`.
+
+Firmware con las dos redes: flash al 95.5 % y RAM al 79 %.
+
 Al probar la red aparecieron dos defectos de la lógica de cruces, que también afectaban sin red, y quedaron corregidos:
 - **Línea en diagonal en curvas cerradas:** ocupa 4 sensores y se confundía con un cruce, así que el robot seguía de frente. Ahora, sin otra línea cerca, 4 sensores es una línea normal.
 - **Después de un cruce:** si la línea quedaba lejos de la posición retenida, el robot seguía "congelado" hasta ~0.3 s. Ahora acepta la línea tras ~15 ms de verla sola y limpia.

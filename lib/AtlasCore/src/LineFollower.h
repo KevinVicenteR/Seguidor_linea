@@ -85,6 +85,9 @@ class LineFollower {
   void apply(const MotorCommand& command);
   int16_t compensateDeadband(int16_t pwm) const;
   int16_t guidedVelocity(int16_t velocity) const;
+  // Red de control: porcentaje de kp y kd para esta lectura.
+  void neuralGains(int32_t error, int16_t velocity, uint8_t* kpPercent, uint8_t* kdPercent) const;
+  uint8_t curvatureAhead() const;
   void trackDistance();
   void onGapEntered();
   void recordCurvature();
@@ -130,6 +133,7 @@ class LineFollower {
   bool centered_ = false;
   Side lastSide_ = Side::Left;
 
+  int32_t lastError_ = 0;
   LineReading reading_;
   MotorCommand command_;
 };

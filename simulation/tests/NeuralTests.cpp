@@ -1,5 +1,7 @@
 #include "Fakes.h"
+#include "LineFollower.h"
 #include "LineSensorArray.h"
+#include "PdController.h"
 #include "TestFramework.h"
 #include "TinyMlp.h"
 
@@ -98,4 +100,59 @@ TEST("Tras un cruce, una sola línea limpia lejos de la posición retenida se ac
   const LineReading settled = readMany(sensors, 25);
   EXPECT_FALSE(settled.ambiguous);
   EXPECT_EQ(settled.position, 11500);
+}
+
+TEST("PD con kp y kd separados al mismo % que la versión de un solo %") {
+  PdController single(0.02f, 1.5f, 1000, 1);
+  PdController split(0.02f, 1.5f, 1000, 1);
+  const int32_t errors[] = {0, 800, 1500, -300, -2400, 50};
+  for (int32_t e : errors) EXPECT_EQ(split.update(e, 80, 80), single.update(e, 80));
+}
+
+namespace {
+
+// Red de control con salida fija: sesgo enorme o muy negativo, sin pesos.
+struct ConstantGainNet {
+  int8_t w1[6] = {};
+  int32_t b1[1] = {};
+  int16_t w2[2] = {};
+  int32_t b2[2];
+  TinyMlpWeights weights;
+  explicit ConstantGainNet(int32_t percent)
+      : b2{percent << 8, percent << 8}, weights{6, 1, 2, w1, b1, 0, w2, b2, 8} {}
+};
+
+int16_t steeringWith(const TinyMlpWeights* network, bool neural) {
+  test::FakeSensorBus bus;
+  test::FakeDrivetrain drivetrain;
+  RobotConfig config;
+  config.corner.enabled = false;
+  config.speed.startKickMs = 0;
+  config.speed.startKickPwm = 0;
+  config.control.minMotorPwm = 0;
+  config.control.curveSlowdownPercent = 0;
+  config.adaptive.autoDamping = false;
+  config.control.neuralGains = neural;
+  config.control.gainNetwork = network;
+  LineSensorArray sensors(bus, config.sensors);
+  LineFollower follower(sensors, drivetrain, config);
+  calibrate(sensors, bus);
+  follower.start(150, 0);
+  bus.lineAt(7, 8);
+  for (uint32_t t = 0; t < 200; t++) follower.update(t);
+  bus.lineAt(10, 11);
+  follower.update(200);
+  return static_cast<int16_t>((drivetrain.leftMotor.pwm - drivetrain.rightMotor.pwm) / 2);
+}
+
+}  // namespace
+
+TEST("Red de control: la corrección nunca pasa del 130 % ni baja del 70 %") {
+  const int16_t nominal = steeringWith(nullptr, false);
+  ConstantGainNet huge(1000), tiny(-1000), neutral(100);
+  const int16_t high = steeringWith(&huge.weights, true);
+  const int16_t low = steeringWith(&tiny.weights, true);
+  EXPECT_NEAR(steeringWith(&neutral.weights, true), nominal, 1);
+  EXPECT_NEAR(high, nominal * 13 / 10, 2);
+  EXPECT_NEAR(low, nominal * 7 / 10, 2);
 }

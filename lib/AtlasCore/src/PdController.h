@@ -15,8 +15,13 @@ class PdController {
   void reset();
   // gainPercent escala Kp y Kd (auto-amortiguación); 100 = ganancias nominales.
   int16_t update(int32_t error, uint8_t gainPercent = 100);
+  // Porcentajes separados de kp y kd (red neuronal de control).
+  int16_t update(int32_t error, uint8_t kpPercent, uint8_t kdPercent);
 
  private:
+  void filterDelta(int32_t error);
+  int16_t clampOutput(int32_t output) const;
+
   float kp_;
   float kd_;
   int16_t outputLimit_;

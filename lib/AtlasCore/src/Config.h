@@ -12,6 +12,8 @@
 
 namespace atlas {
 
+struct TinyMlpWeights;
+
 constexpr uint8_t kSensorCount = 16;
 constexpr uint16_t kSensorPositionScale = 1000;
 constexpr uint16_t kLinePositionMax = (kSensorCount - 1) * kSensorPositionScale;  // 15000
@@ -75,6 +77,13 @@ struct ControlConfig {
   // este mínimo (con la succión los motores no giran con PWM bajos).
   int16_t minMotorPwm = 40;
   uint16_t loopPeriodUs = 750;
+  // Red neuronal de control (NeuralGainWeights.h): ajusta en marcha qué
+  // porcentaje de kp y de kd se usa según el error, la velocidad y la curva del
+  // mapa. kp y kd no cambian; la red solo los multiplica entre 70 % y 130 %.
+  bool neuralGains = false;
+  // Solo para la herramienta de entrenamiento: pesos a probar (nullptr = los
+  // de NeuralGainWeights.h).
+  const TinyMlpWeights* gainNetwork = nullptr;
 };
 
 struct SpeedConfig {
