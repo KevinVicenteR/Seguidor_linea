@@ -48,6 +48,16 @@ struct SensorConfig {
   // siempre a la misma distancia (~30 cm), también a velocidad baja.
   uint16_t maxHeldReads = 150;
   int16_t heldReadsReferencePwm = 250;
+  // Red neuronal de posición (NeuralPositionWeights.h): calcula la posición
+  // fina de la línea con los 7 sensores alrededor del grupo seguido, usando
+  // las lecturas sin umbral. false = promedio ponderado original.
+  bool neuralPosition = false;
+  // La red solo afina: su resultado no se aleja del promedio ponderado más que
+  // esto (en esquinas y finales de línea, fuera de su entrenamiento, adivina).
+  uint16_t neuralMaxCorrection = 300;
+  // Solo para la herramienta de entrenamiento: calcula normalizedValues()
+  // aunque la red esté apagada.
+  bool exposeNormalizedValues = false;
 };
 
 struct ControlConfig {

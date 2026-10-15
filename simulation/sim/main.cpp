@@ -5,7 +5,7 @@
   velocidades, genera el visor interactivo y termina con código 1 si algún
   escenario obligatorio falla (útil en CI).
 
-  Uso: atlas_sim [--out DIR] [--template RUTA] [--track N] [--quick]
+  Uso: atlas_sim [--out DIR] [--template RUTA] [--track N] [--quick] [--sin-red]
 */
 #include <atomic>
 #include <cstdio>
@@ -37,6 +37,7 @@ struct Options {
   std::string templatePath = ATLAS_VIEWER_TEMPLATE;
   int onlyTrack = -1;
   bool quick = false;
+  bool neuralNetwork = true;  // como el firmware (kUseNeuralNetwork)
 };
 
 Options parseOptions(int argc, char** argv) {
@@ -47,6 +48,7 @@ Options parseOptions(int argc, char** argv) {
     else if (arg == "--template" && i + 1 < argc) options.templatePath = argv[++i];
     else if (arg == "--track" && i + 1 < argc) options.onlyTrack = std::stoi(argv[++i]);
     else if (arg == "--quick") options.quick = true;
+    else if (arg == "--sin-red") options.neuralNetwork = false;
   }
   return options;
 }
@@ -154,11 +156,16 @@ std::string exampleRobotLog(const std::vector<TrackEntry>& tracks) {
   return attempts.back().robotLog;
 }
 
-std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs) {
+std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs,
+                                   bool neuralNetwork) {
   std::vector<std::vector<ScenarioResult>> perSpec(specs.size());
   std::atomic<std::size_t> next{0};
   std::atomic<std::size_t> done{0};
-  const ScenarioRunner runner;
+  atlas::RobotConfig safe = atlas::safeProfile();
+  atlas::RobotConfig fast = atlas::fastProfile();
+  atlas::useNeuralNetworks(safe, neuralNetwork);
+  atlas::useNeuralNetworks(fast, neuralNetwork);
+  const ScenarioRunner runner(RobotParams(), SensorModel(), safe, fast);
 
   auto worker = [&]() {
     for (std::size_t i = next++; i < specs.size(); i = next++) {
@@ -202,7 +209,7 @@ int main(int argc, char** argv) {
   const std::vector<ScenarioSpec> specs = buildScenarios(tracks, options);
 
   std::printf("ATLAS · banco de simulación: %zu pistas, %zu escenarios\n", tracks.size(), specs.size());
-  const std::vector<ScenarioResult> results = runAll(tracks, specs);
+  const std::vector<ScenarioResult> results = runAll(tracks, specs, options.neuralNetwork);
   printSummary(results);
 
   mkdir(options.outputDir.c_str(), 0755);

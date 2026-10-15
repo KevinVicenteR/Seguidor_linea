@@ -1,9 +1,13 @@
 #include "LineSensorArray.h"
 
+#include "NeuralPositionWeights.h"
+#include "TinyMlp.h"
+
 namespace atlas {
 
 constexpr uint8_t LineSensorArray::kAdcMax;
 constexpr uint8_t LineSensorArray::kWidthWindow;
+constexpr uint8_t LineSensorArray::kSettledReads;
 
 LineSensorArray::LineSensorArray(ILineSensorBus& bus, const SensorConfig& config)
     : bus_(bus), config_(config), heldReadsLimit_(config.maxHeldReads) {
@@ -59,10 +63,13 @@ void LineSensorArray::finishCalibration() {
   for (uint8_t i = 0; i < kSensorCount; i++) {
     if (max_[i] <= min_[i]) {
       threshold_[i] = kAdcMax;  // sensor sin calibrar: nunca reporta línea
+      normalizeScale_[i] = 0;
       continue;
     }
     const uint16_t span = max_[i] - min_[i];
     threshold_[i] = min_[i] + span * config_.thresholdPercent / 100;
+    // span >= minCalibrationSpan (40) en sensores válidos: la escala cabe en 8 bits.
+    normalizeScale_[i] = static_cast<uint8_t>(span >= 32 ? (127U << 6) / span : 0);
   }
 }
 
@@ -91,8 +98,19 @@ uint8_t LineSensorArray::scaleToCalibratedRange(uint8_t sensor, uint8_t raw) con
 
 void LineSensorArray::readCalibrated() {
   readRaw();
+  if (config_.neuralPosition || config_.exposeNormalizedValues) normalizeRaw();
   for (uint8_t i = 0; i < kSensorCount; i++) values_[i] = scaleToCalibratedRange(i, values_[i]);
   fillDamagedSensors();
+}
+
+// Lectura cruda llevada a 0 ... 127 con el mínimo y máximo de calibración,
+// sin el umbral del 50 %: la red ve también los sensores apenas cubiertos.
+void LineSensorArray::normalizeRaw() {
+  for (uint8_t i = 0; i < kSensorCount; i++) {
+    const uint8_t aboveMin = values_[i] > min_[i] ? values_[i] - min_[i] : 0;
+    const uint16_t scaled = static_cast<uint16_t>(aboveMin * normalizeScale_[i]) >> 6;  // MUL de 8 bits
+    normalized_[i] = static_cast<int8_t>(scaled > 127 ? 127 : scaled);
+  }
 }
 
 // Un sensor que no se pudo calibrar (dañado o tapado) toma el promedio de
@@ -101,6 +119,7 @@ void LineSensorArray::fillDamagedSensors() {
   for (uint8_t i = 1; i + 1 < kSensorCount; i++) {
     if (isSensorCalibrated(i) || !isSensorCalibrated(i - 1) || !isSensorCalibrated(i + 1)) continue;
     values_[i] = static_cast<uint8_t>((static_cast<uint16_t>(values_[i - 1]) + values_[i + 1]) / 2);
+    normalized_[i] = static_cast<int8_t>((normalized_[i - 1] + normalized_[i + 1]) / 2);
   }
 }
 
@@ -133,7 +152,14 @@ LineReading LineSensorArray::readLine() {
 
   // En un cruce se mantiene la última posición: el robot sigue recto.
   const bool ambiguous = !isReacquiring() && (merging || isAmbiguous(cluster, reading.position));
-  if (ambiguous && heldReads_ < heldReadsLimit_) {
+  // Pasado el cruce, si la barra ve una sola línea limpia (ancho normal, sin
+  // otras ramas) durante un rato, esa es la línea: no seguir congelado aunque
+  // haya quedado lejos de la posición retenida.
+  const bool singleCleanLine = !reading.otherLineLeft && !reading.otherLineRight && width <= normalWidth_ &&
+                               intensity <= normalIntensity_ + normalIntensity_ / 5;
+  cleanHeldReads_ = ambiguous && singleCleanLine && cleanHeldReads_ < 0xFF ? cleanHeldReads_ + 1 : 0;
+  const bool settled = cleanHeldReads_ >= kSettledReads;
+  if (ambiguous && !settled && heldReads_ < heldReadsLimit_) {
     reading.position = lastPosition_;
     reading.ambiguous = true;
     heldReads_++;
@@ -196,7 +222,10 @@ void LineSensorArray::resetTracking() {
 
 // Grupo demasiado ancho para ser una sola línea, o salto imposible de posición.
 bool LineSensorArray::isAmbiguous(Cluster cluster, uint16_t position) const {
-  const bool tooWide = cluster.last - cluster.first + 1 > config_.maxLineWidthSensors;
+  // En curvas cerradas la línea cruza la barra en diagonal y ocupa un sensor
+  // más; sin otra línea cerca eso no es un cruce.
+  const uint8_t widest = config_.maxLineWidthSensors + (otherLineNearby() ? 0 : 1);
+  const bool tooWide = cluster.last - cluster.first + 1 > widest;
   const int32_t jump = static_cast<int32_t>(position) - static_cast<int32_t>(lastPosition_);
   const bool jumped = wasOnLine_ && (jump > config_.maxPositionJump || -jump > config_.maxPositionJump);
   return tooWide || jumped;
@@ -216,10 +245,46 @@ LineReading LineSensorArray::weightedReading(Cluster cluster) const {
   }
 
   reading.position = weighted ? static_cast<uint16_t>(weighted / sum) : 0;
+  if (reading.onLine && canUseNeuralPosition(cluster)) reading.position = neuralPosition(cluster, reading.position);
   reading.leftEdgeDetected = cluster.first <= 1 && (values_[0] || values_[1]);
   reading.rightEdgeDetected =
       cluster.last >= kSensorCount - 2 && (values_[kSensorCount - 2] || values_[kSensorCount - 1]);
   return reading;
+}
+
+// La red se entrenó con la línea sola dentro de la barra: en los extremos
+// (posición 0 / 15000 = línea perdida) y en grupos anchos (cruces, esquinas)
+// se usa el promedio ponderado.
+bool LineSensorArray::canUseNeuralPosition(Cluster cluster) const {
+  const uint8_t width = cluster.last - cluster.first + 1;
+  return config_.neuralPosition && cluster.first > 0 && cluster.last < kSensorCount - 1 &&
+         width <= config_.maxLineWidthSensors;
+}
+
+// Ventana de 7 sensores centrada en el grupo; los sensores fuera del grupo
+// (más uno a cada lado) se ven como fondo para no mezclar otras líneas.
+uint16_t LineSensorArray::neuralPosition(Cluster cluster, uint16_t weighted) const {
+  const int8_t center = static_cast<int8_t>((cluster.first + cluster.last) / 2);
+  int8_t input[neural::kPositionInputs];
+  for (int8_t k = 0; k < static_cast<int8_t>(neural::kPositionInputs); k++) {
+    const int8_t sensor = center + k - static_cast<int8_t>(neural::kPositionInputs / 2);
+    const bool visible = sensor >= static_cast<int8_t>(cluster.first) - 1 && sensor <= cluster.last + 1 &&
+                         sensor >= 0 && sensor < static_cast<int8_t>(kSensorCount);
+    input[k] = visible ? normalized_[sensor] : 0;
+  }
+  int32_t offset = 0;
+  TinyMlp(neural::kPositionNet).evaluate(input, &offset);
+
+  // Solo afina el promedio ponderado, y nunca fuera del grupo (± medio sensor).
+  const int32_t correction = config_.neuralMaxCorrection;
+  int32_t lowest = cluster.first * static_cast<int32_t>(kSensorPositionScale) - kSensorPositionScale / 2;
+  int32_t highest = cluster.last * static_cast<int32_t>(kSensorPositionScale) + kSensorPositionScale / 2;
+  if (lowest < weighted - correction) lowest = weighted - correction;
+  if (highest > weighted + correction) highest = weighted + correction;
+  int32_t position = center * static_cast<int32_t>(kSensorPositionScale) + offset;
+  if (position < lowest) position = lowest;
+  if (position > highest) position = highest;
+  return static_cast<uint16_t>(position);
 }
 
 // Grupo de sensores contiguos activos cuyo centro está más cerca de la

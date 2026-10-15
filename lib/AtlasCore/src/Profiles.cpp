@@ -24,4 +24,6 @@ RobotConfig fastProfile() {
   return config;
 }
 
+void useNeuralNetworks(RobotConfig& config, bool enabled) { config.sensors.neuralPosition = enabled; }
+
 }  // namespace atlas

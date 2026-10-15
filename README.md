@@ -72,6 +72,28 @@ Pista de competencia, 10 variantes de ruido por modelo de robot:
 
 El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si su dinámica es "difícil" (robot real), las vueltas guiadas reducen la velocidad solas (`easyLostPerMille`, `slowdownPerLostPerMille`). En el reconocimiento a PWM 100, el robot "real" falló 1 de 32 veces; los demás 0.
 
+## Red neuronal (rama `neouronal`)
+
+**Interruptor:** `kUseNeuralNetwork` en `src/main.cpp` (`true` = red activa; `false` = control clásico de antes). En el simulador: `atlas_sim --sin-red` para comparar.
+
+### Fase 1: posición fina de la línea
+- **Qué hace:** una red pequeña (7 entradas → 8 neuronas ReLU → 1 salida, 76 pesos y sesgos en la flash) lee los 7 sensores alrededor de la línea **sin el umbral del 50 %**. Así también ve los sensores apenas cubiertos, que el promedio ponderado descarta, y calcula la posición con más precisión. Solo reemplaza la posición; los cruces, picos, huecos y bordes siguen con la lógica de siempre. En los extremos de la barra y en grupos anchos usa el promedio ponderado, y su resultado nunca se aleja más de ±300 (±2.7 mm) de él.
+- **En el AVR:** aritmética entera (pesos int8/int16, `MULS` nativo), ~150 µs por lectura; firmware al 92 % de flash y 77 % de RAM.
+- **Entrenamiento:** `atlas_train_nn posicion` corre el firmware en todas las pistas con 3 modelos de robot, 3 velocidades y sensores variados (tamaño del punto de lectura, ganancia, contraste, ruido, luz). La etiqueta es el cruce verdadero de la línea con la barra, que el simulador conoce. Luego cuantiza a enteros y escribe `lib/AtlasCore/src/NeuralPositionWeights.h`.
+- **Precisión (corridas de validación no usadas al entrenar):** error de posición de **1.3 mm → 0.53 mm (−60 %)**; la versión en enteros es igual de precisa que la de `double`.
+
+| Todas las pistas (3 modelos × 10 semillas × 3 intentos, turbina 200) | Fallos |
+|---|---|
+| Sin red | 10 de 990 (vueltas con mapa en Gran Premio) |
+| **Con red** | **0 de 990** |
+| Con red y lazo más lento (costo de la red + margen) | 0 de 990 |
+
+En tus pistas (práctica y competencia, configuración de `main.cpp`): 0 fallos con y sin red; con red, entre 0.1 y 0.5 s más rápido y error p95 igual o menor.
+
+Al probar la red aparecieron dos defectos de la lógica de cruces, que también afectaban sin red, y quedaron corregidos:
+- **Línea en diagonal en curvas cerradas:** ocupa 4 sensores y se confundía con un cruce, así que el robot seguía de frente. Ahora, sin otra línea cerca, 4 sensores es una línea normal.
+- **Después de un cruce:** si la línea quedaba lejos de la posición retenida, el robot seguía "congelado" hasta ~0.3 s. Ahora acepta la línea tras ~15 ms de verla sola y limpia.
+
 ## Casos extremos
 
 `atlas_extremes` compara el firmware original del fabricante con el nuevo frente a imperfecciones reales (pista de competencia, Gran Premio, laberinto y chicanas; PWM 100, 160 y 220):

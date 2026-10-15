@@ -42,3 +42,8 @@ target_compile_definitions(atlas_extremes PRIVATE
 # Optimizador del perfil Rápido + planificador del aprendizaje de pista.
 add_executable(atlas_tune_learning tools/atlas_tune_learning.cpp)
 target_link_libraries(atlas_tune_learning PRIVATE atlas_sim_lib Threads::Threads)
+
+# Entrenamiento de las redes neuronales del firmware (escribe NeuralPositionWeights.h).
+add_executable(atlas_train_nn tools/atlas_train_nn.cpp)
+target_link_libraries(atlas_train_nn PRIVATE atlas_sim_lib Threads::Threads)
+target_compile_definitions(atlas_train_nn PRIVATE ATLAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

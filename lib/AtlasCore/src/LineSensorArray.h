@@ -47,6 +47,9 @@ class LineSensorArray {
   bool isCalibrationValid() const { return calibratedSensorCount() >= config_.requiredCalibratedSensors; }
 
   const uint8_t* values() const { return values_; }
+  // Lecturas normalizadas sin umbral (0 = fondo, 127 = línea): entrada de la
+  // red neuronal de posición. Solo se calculan con neuralPosition activo.
+  const int8_t* normalizedValues() const { return normalized_; }
   const uint8_t* minValues() const { return min_; }
   const uint8_t* maxValues() const { return max_; }
   const uint8_t* thresholds() const { return threshold_; }
@@ -63,6 +66,9 @@ class LineSensorArray {
   uint8_t scaleToCalibratedRange(uint8_t sensor, uint8_t raw) const;
   void fillDamagedSensors();
   LineReading weightedReading(Cluster cluster) const;
+  bool canUseNeuralPosition(Cluster cluster) const;
+  uint16_t neuralPosition(Cluster cluster, uint16_t weighted) const;
+  void normalizeRaw();
   uint16_t clusterIntensity(Cluster cluster) const;
   Cluster nearestCluster() const;
   bool isAmbiguous(Cluster cluster, uint16_t position) const;
@@ -78,10 +84,14 @@ class LineSensorArray {
   uint8_t min_[kSensorCount] = {};
   uint8_t max_[kSensorCount] = {};
   uint8_t threshold_[kSensorCount] = {};
+  uint8_t normalizeScale_[kSensorCount] = {};  // (127 << 6) / (máx - mín)
+  int8_t normalized_[kSensorCount] = {};
   uint16_t lastPosition_ = kLinePositionCenter;
   bool wasOnLine_ = false;
   uint8_t readsSinceReacquired_ = 0;
   uint16_t heldReads_ = 0;
+  static constexpr uint8_t kSettledReads = 20;  // ~15 ms de línea única y limpia
+  uint8_t cleanHeldReads_ = 0;
   uint16_t heldReadsLimit_;
   uint16_t readsSinceOtherLine_ = 0xFFFF;
   static constexpr uint8_t kWidthWindow = 32;

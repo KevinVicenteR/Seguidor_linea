@@ -16,4 +16,8 @@ namespace atlas {
 RobotConfig safeProfile();
 RobotConfig fastProfile();
 
+// Redes neuronales (NeuralPositionWeights.h): true = activas, false = control
+// clásico idéntico al anterior.
+void useNeuralNetworks(RobotConfig& config, bool enabled);
+
 }  // namespace atlas

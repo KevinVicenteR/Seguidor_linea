@@ -31,6 +31,9 @@ using namespace atlas;
 constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
+// Red neuronal (posición fina de la línea). false = control clásico de antes.
+constexpr bool kUseNeuralNetwork = true;
+
 
 void applyUserSettings(RobotConfig& config) {
   config.speed.basePwm = 170;
@@ -41,6 +44,8 @@ void applyUserSettings(RobotConfig& config) {
 
   config.impeller.pwm = 190;  
   config.impeller.runRampMs = 250;
+
+  useNeuralNetworks(config, kUseNeuralNetwork);
 }
 
 RobotConfig makeConfig(RobotConfig profile) {
