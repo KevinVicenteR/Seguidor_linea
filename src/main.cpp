@@ -22,7 +22,7 @@
 #include "Config.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
-#include "Profiles.h"
+#include "FirmwareConfig.h"
 #include "TrackMap.h"
 
 using namespace atlas;
@@ -31,39 +31,10 @@ using namespace atlas;
 constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
-// Red neuronal (posición fina de la línea). false = control clásico de antes.
-constexpr bool kUseNeuralNetwork = true;
+// Ajustes compartidos con el modo --firmware del simulador.
+const RobotConfig kSafeConfig = firmwareSafeConfig();
+const RobotConfig kFastConfig = firmwareFastConfig();
 
-
-void applyUserSettings(RobotConfig& config) {
-  config.speed.basePwm = 170;
-  config.speed.minPwm = 60;
-  config.speed.maxPwm = 250;
-  config.speed.stepPwm = 10;
-  config.speed.runRampMs = 150;
-
-  config.impeller.pwm = 190;  
-  config.impeller.runRampMs = 250;
-
-  useNeuralNetworks(config, kUseNeuralNetwork);
-}
-
-RobotConfig makeConfig(RobotConfig profile) {
-  applyUserSettings(profile);
-  return profile;
-}
-
-// Vueltas 2 y 3 (con mapa): van más rápido, la turbina aprieta más para
-// tener agarre en las curvas.
-RobotConfig makeFastConfig() {
-  RobotConfig config = makeConfig(fastProfile());
-  config.impeller.pwm = 235;
-  return config;
-}
-
-
-const RobotConfig kSafeConfig = makeConfig(safeProfile());  // 1er intento: reconocimiento
-const RobotConfig kFastConfig = makeFastConfig();  // intentos con mapa aprendido
 
 AvrClock robotClock;
 AvrOperatorPanel panel;

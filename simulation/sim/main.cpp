@@ -5,7 +5,7 @@
   velocidades, genera el visor interactivo y termina con código 1 si algún
   escenario obligatorio falla (útil en CI).
 
-  Uso: atlas_sim [--out DIR] [--template RUTA] [--track N] [--quick] [--sin-red]
+  Uso: atlas_sim [--out DIR] [--template RUTA] [--track N] [--quick] [--sin-red] [--firmware]
 */
 #include <atomic>
 #include <cstdio>
@@ -16,6 +16,7 @@
 #include <thread>
 #include <vector>
 
+#include "FirmwareConfig.h"
 #include "Report.h"
 #include "ScenarioRunner.h"
 #include "TrackLibrary.h"
@@ -37,6 +38,7 @@ struct Options {
   std::string templatePath = ATLAS_VIEWER_TEMPLATE;
   int onlyTrack = -1;
   bool quick = false;
+  bool firmware = false;
   bool neuralNetwork = true;  // como el firmware (kUseNeuralNetwork)
 };
 
@@ -47,6 +49,7 @@ Options parseOptions(int argc, char** argv) {
     if (arg == "--out" && i + 1 < argc) options.outputDir = argv[++i];
     else if (arg == "--template" && i + 1 < argc) options.templatePath = argv[++i];
     else if (arg == "--track" && i + 1 < argc) options.onlyTrack = std::stoi(argv[++i]);
+    else if (arg == "--firmware") options.firmware = true;
     else if (arg == "--quick") options.quick = true;
     else if (arg == "--sin-red") options.neuralNetwork = false;
   }
@@ -79,6 +82,22 @@ std::size_t findTrack(const std::vector<TrackEntry>& tracks, const std::string& 
 // Cada pista debe completarse en menos de 40 s a PWM 130 (arranque), 160, 190
 // y 220. PWM 250 (el máximo del firmware) se reporta como prueba extrema.
 std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, const Options& options) {
+  if (options.firmware) {
+    std::vector<ScenarioSpec> specs;
+    const auto safe = atlas::firmwareSafeConfig(options.neuralNetwork);
+    const auto fast = atlas::firmwareFastConfig(options.neuralNetwork);
+    for (std::size_t i = 0; i < tracks.size(); ++i) {
+      if (options.onlyTrack >= 0 && static_cast<int>(i) != options.onlyTrack) continue;
+      const auto& name = tracks[i].track.name();
+      ScenarioSpec spec = makeSpec(i, name, safe.speed.basePwm, !isBeyondGeometry(name), " · firmware");
+      spec.impellerPwm = safe.impeller.pwm;
+      spec.fastImpellerPwm = fast.impeller.pwm;
+      spec.learnTrack = true;
+      spec.attempts = 3;
+      specs.push_back(spec);
+    }
+    return specs;
+  }
   const std::vector<int16_t> requiredSpeeds = options.quick ? std::vector<int16_t>{190} : std::vector<int16_t>{130, 160, 190, 220};
   std::vector<ScenarioSpec> specs;
 
@@ -111,7 +130,7 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
         makeSpec(i, tracks[i].track.name(), 100, !isBeyondGeometry(tracks[i].track.name()), " · aprendizaje");
     learning.learnTrack = true;
     learning.attempts = 3;
-    learning.fastImpellerPwm = 215;  // como el firmware: turbina más fuerte con el mapa
+    learning.fastImpellerPwm = 215;  // banco histórico; --firmware usa los ajustes de despliegue
     specs.push_back(learning);
   }
 
@@ -157,12 +176,12 @@ std::string exampleRobotLog(const std::vector<TrackEntry>& tracks) {
 }
 
 std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const std::vector<ScenarioSpec>& specs,
-                                   bool neuralNetwork) {
+                                   bool neuralNetwork, bool firmware) {
   std::vector<std::vector<ScenarioResult>> perSpec(specs.size());
   std::atomic<std::size_t> next{0};
   std::atomic<std::size_t> done{0};
-  atlas::RobotConfig safe = atlas::safeProfile();
-  atlas::RobotConfig fast = atlas::fastProfile();
+  atlas::RobotConfig safe = firmware ? atlas::firmwareSafeConfig() : atlas::safeProfile();
+  atlas::RobotConfig fast = firmware ? atlas::firmwareFastConfig() : atlas::fastProfile();
   atlas::useNeuralNetworks(safe, neuralNetwork);
   atlas::useNeuralNetworks(fast, neuralNetwork);
   const ScenarioRunner runner(RobotParams(), SensorModel(), safe, fast);
@@ -209,11 +228,12 @@ int main(int argc, char** argv) {
   const std::vector<ScenarioSpec> specs = buildScenarios(tracks, options);
 
   std::printf("ATLAS · banco de simulación: %zu pistas, %zu escenarios\n", tracks.size(), specs.size());
-  const std::vector<ScenarioResult> results = runAll(tracks, specs, options.neuralNetwork);
+  const std::vector<ScenarioResult> results = runAll(tracks, specs, options.neuralNetwork, options.firmware);
   printSummary(results);
 
   mkdir(options.outputDir.c_str(), 0755);
-  const atlas::RobotConfig firmware;
+  atlas::RobotConfig firmware = options.firmware ? atlas::firmwareSafeConfig() : atlas::safeProfile();
+  atlas::useNeuralNetworks(firmware, options.neuralNetwork);
   const RobotParams robot;
   const ReportContext context{tracks, results, firmware, robot};
   writeViewer(options.templatePath, options.outputDir + "/index.html", context);

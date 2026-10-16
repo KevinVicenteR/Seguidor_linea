@@ -275,3 +275,18 @@ Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2,
 - El modelo físico es simplificado (sin inercia de guiñada ni deriva lateral detallada); sirve para comparar algoritmos y configuraciones, no reemplaza las pruebas en pista.
 - En el laberinto, a velocidades bajas (PWM 100–130) la esquina aguda de 115° puede hacer que la recuperación gire hacia el lado equivocado; a partir de PWM 160 pasa.
 - El manual recomienda PWM ≤ 160, impeller ≤ 215 y no exceder 8 s de prueba con 3S. Las velocidades superiores son pruebas de simulación: súbelas en el robot real de forma gradual.
+
+### Validar los ajustes de despliegue
+
+`atlas_sim --firmware --out DIR` ejecuta tres intentos en cada pista con los
+ajustes compartidos con `src/main.cpp` en `FirmwareConfig.h`: reconocimiento
+PWM 170, turbina 190; perfil Rápido con mapa y turbina 235. Añadir `--sin-red`
+permite comparar ambas redes apagadas con las mismas semillas. `--track 0`
+limita la ejecución a la pista de competencia. Los dos modos de esa pista
+forman parte de CTest. Los rizos menores que la distancia barra-eje siguen
+siendo exploratorios, no obligatorios.
+
+El banco general conserva su barrido histórico (130/160/190/220/250), turbina
+200 y aprendizaje a 100 con turbina 215. Ese barrido no representa por sí solo
+los ajustes de despliegue. Las simulaciones no sustituyen pruebas en hardware;
+una velocidad guardada en EEPROM también puede cambiar el arranque real.

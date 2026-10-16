@@ -156,3 +156,20 @@ TEST("Red de control: la corrección nunca pasa del 130 % ni baja del 70 %") {
   EXPECT_NEAR(high, nominal * 13 / 10, 2);
   EXPECT_NEAR(low, nominal * 7 / 10, 2);
 }
+
+// La misma factoría se usa en AVR y en --firmware, también para el control clásico.
+#include "FirmwareConfig.h"
+TEST("Ajustes de despliegue conservan velocidades y activan ambas redes") {
+  for (bool neural : {false, true}) {
+    const auto safe = firmwareSafeConfig(neural);
+    const auto fast = firmwareFastConfig(neural);
+    EXPECT_EQ(safe.speed.basePwm, 170);
+    EXPECT_EQ(safe.impeller.pwm, 190);
+    EXPECT_EQ(fast.speed.basePwm, 170);
+    EXPECT_EQ(fast.impeller.pwm, 235);
+    EXPECT_EQ(safe.sensors.neuralPosition, neural);
+    EXPECT_EQ(safe.control.neuralGains, neural);
+    EXPECT_EQ(fast.sensors.neuralPosition, neural);
+    EXPECT_EQ(fast.control.neuralGains, neural);
+  }
+}

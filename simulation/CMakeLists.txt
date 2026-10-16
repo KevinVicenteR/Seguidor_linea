@@ -23,6 +23,10 @@ target_compile_options(atlas_tests PRIVATE -Wall -Wextra)
 add_test(NAME unit_tests COMMAND atlas_tests)
 add_test(NAME simulation_quick COMMAND atlas_sim --quick --out ${CMAKE_BINARY_DIR}/simulation_quick)
 
+# Tres intentos con los ajustes reales de despliegue en la pista de competencia.
+add_test(NAME simulation_firmware COMMAND atlas_sim --firmware --track 0 --out ${CMAKE_BINARY_DIR}/simulation_firmware)
+add_test(NAME simulation_firmware_classic COMMAND atlas_sim --firmware --sin-red --track 0 --out ${CMAKE_BINARY_DIR}/simulation_firmware_classic)
+
 add_custom_target(simulate
   COMMAND atlas_sim --out ${CMAKE_SOURCE_DIR}/simulation_output
   DEPENDS atlas_sim
