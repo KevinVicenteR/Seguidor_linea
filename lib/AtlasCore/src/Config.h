@@ -63,8 +63,9 @@ struct SensorConfig {
 };
 
 struct ControlConfig {
-  float kp = 0.014f;  // suave pero con fuerza para curvas cerradas a alta velocidad
-  float kd = 1.0f;
+  // Barrido de 32,406 competencias simuladas contra la oscilación (antes 0.014 / 1.0).
+  float kp = 0.0075f;
+  float kd = 0.86f;
   int16_t maxCorrectionPwm = 1000;
   // Filtro del derivativo (media exponencial): 0 = sin filtro, n = peso 1/2^n.
   uint8_t derivativeFilterShift = 1;

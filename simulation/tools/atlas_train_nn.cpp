@@ -17,8 +17,14 @@
     Hexágono con 3 modelos de robot. Aptitud = tiempo + error p95 + zigzag,
     con fuerte castigo por salirse. Escribe NeuralGainWeights.h.
 
+  ganancias: barrido de kp/kd (solo hacia abajo) para quitar oscilación con
+    los ajustes de FirmwareConfig.h: hipercubo latino, refinamiento y
+    validación con semillas separadas. Restricciones: 0 salidas y tiempo de
+    las vueltas con mapa <= 103 % del actual; gana el menor zigzag.
+
   Uso: atlas_train_nn posicion [lecturas]     (25000 por defecto)
-       atlas_train_nn control [competencias]   (25000 por defecto)
+       atlas_train_nn control [competencias] [neutra]   (25000 por defecto)
+       atlas_train_nn ganancias
 */
 #include <algorithm>
 #include <atomic>
@@ -34,6 +40,7 @@
 #include <thread>
 #include <vector>
 
+#include "FirmwareConfig.h"
 #include "LineSensorArray.h"
 #include "NeuralGainWeights.h"
 #include "NeuralPositionWeights.h"
@@ -565,6 +572,9 @@ RobotParams robotModel(int model) {
   return p;
 }
 
+// Peso del zigzag en la aptitud: alto para que la red no meta oscilación.
+constexpr double kZigzagWeight = 1.0;
+
 struct Score {
   double cost = 0;
   int failures = 0;
@@ -601,7 +611,7 @@ Score evaluateCase(const std::vector<TrackEntry>& tracks, const Case& c, const a
       s.cost += 300.0 * weight;
       continue;
     }
-    s.cost += weight * (r.raceTime + 0.04 * r.p95OffsetMm + 0.3 * r.zigzagPerMeter);
+    s.cost += weight * (r.raceTime + 0.04 * r.p95OffsetMm + kZigzagWeight * r.zigzagPerMeter);
     s.time += r.raceTime;
     s.p95 += r.p95OffsetMm;
     s.zigzag += r.zigzagPerMeter;
@@ -716,12 +726,21 @@ Score scoreOf(const std::vector<TrackEntry>& tracks, const std::vector<Case>& ca
   return evaluateAll(tracks, cases, {&view})[0];
 }
 
-int train(long budget) {
+// Red que da 100 % / 100 % (neutra) con la capa oculta activa.
+std::vector<double> neutralTheta(std::mt19937& random) {
+  std::normal_distribution<double> gauss(0.0, 1.0);
+  std::vector<double> theta(kParams, 0.0);
+  for (int i = 0; i < kHid * kIn; i++) theta[i] = gauss(random) * 0.7;
+  for (int i = 0; i < kHid; i++) theta[kHid * kIn + i] = 0.2;
+  return theta;
+}
+
+int train(long budget, bool fromNeutral) {
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
   std::mt19937 random(23);
   std::normal_distribution<double> gauss(0.0, 1.0);
 
-  std::vector<double> theta = currentTheta();
+  std::vector<double> theta = fromNeutral ? neutralTheta(random) : currentTheta();
   const int pairs = 8;
   const double rate = 0.04;
   std::vector<double> m(kParams, 0), v(kParams, 0);
@@ -730,7 +749,8 @@ int train(long budget) {
   const std::vector<Case> checkCases = makeCases(tracks, 70000, 1, true);
   std::vector<double> best = theta;
   double bestCost = scoreOf(tracks, checkCases, theta).cost;
-  std::printf("Inicio (red actual): costo de validación %.1f en %zu competencias\n", bestCost, checkCases.size());
+  std::printf("Inicio (%s): costo de validación %.1f en %zu competencias\n", fromNeutral ? "red neutra" : "red actual",
+              bestCost, checkCases.size());
   long used = 0;
   int checksWithoutGain = 0;
   for (int g = 0; used < budget; g++) {
@@ -807,6 +827,211 @@ int train(long budget) {
   return 0;
 }
 
+//  ---------------------------------------------------------------------------
+//  Barrido de kp/kd contra la oscilación
+//  ---------------------------------------------------------------------------
+
+struct Gains {
+  double safeKp, safeKd, fastKp, fastKd;
+};
+
+struct GainResult {
+  int failures = 0;
+  double weight = 0, zigzag = 0, steering = 0, p95 = 0;  // ponderados por vuelta (robot "real" ×1.5)
+  double fastTime = 0;
+  int fastLaps = 0;
+  double meanZigzag() const { return weight ? zigzag / weight : 0; }
+  double meanSteering() const { return weight ? steering / weight : 0; }
+  double meanP95() const { return weight ? p95 / weight : 0; }
+  double meanFastTime() const { return fastLaps ? fastTime / fastLaps : 0; }
+  void add(const GainResult& o) {
+    failures += o.failures;
+    weight += o.weight;
+    zigzag += o.zigzag;
+    steering += o.steering;
+    p95 += o.p95;
+    fastTime += o.fastTime;
+    fastLaps += o.fastLaps;
+  }
+};
+
+// Una competencia (3 intentos) con los ajustes del firmware y estas ganancias.
+// Red de posición activa; red de control apagada (se reentrena después).
+GainResult runGains(const std::vector<TrackEntry>& tracks, const Case& c, const Gains& g) {
+  atlas::RobotConfig safe = atlas::firmwareSafeConfig(true), fast = atlas::firmwareFastConfig(true);
+  safe.control.neuralGains = fast.control.neuralGains = false;
+  safe.control.kp = static_cast<float>(g.safeKp);
+  safe.control.kd = static_cast<float>(g.safeKd);
+  fast.control.kp = static_cast<float>(g.fastKp);
+  fast.control.kd = static_cast<float>(g.fastKd);
+  ScenarioSpec spec;
+  spec.trackIndex = c.track;
+  spec.cruisePwm = safe.speed.basePwm;
+  spec.seed = c.seed;
+  spec.learnTrack = true;
+  spec.attempts = 3;
+  spec.impellerPwm = safe.impeller.pwm;
+  spec.fastImpellerPwm = fast.impeller.pwm;
+  const std::vector<ScenarioResult> attempts =
+      ScenarioRunner(robotModel(c.model), SensorModel(), safe, fast).runAttempts(tracks[c.track], spec);
+  GainResult r;
+  const double w = c.model == 2 ? 1.5 : 1.0;
+  for (std::size_t a = 0; a < attempts.size(); a++) {
+    const ScenarioResult& res = attempts[a];
+    if (!res.passed()) {
+      r.failures++;
+      continue;
+    }
+    r.weight += w;
+    r.zigzag += w * res.zigzagPerMeter;
+    r.steering += w * res.steeringRmsPwm;
+    r.p95 += w * res.p95OffsetMm;
+    if (a > 0) {
+      r.fastTime += res.raceTime;
+      r.fastLaps++;
+    }
+  }
+  return r;
+}
+
+// Evalúa varias configuraciones sobre los mismos casos; devuelve el total por
+// configuración y, aparte, por pista.
+std::vector<GainResult> runAllGains(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases,
+                                    const std::vector<Gains>& configs,
+                                    std::vector<std::vector<GainResult>>* perTrack = nullptr) {
+  std::vector<std::vector<GainResult>> parts(configs.size(), std::vector<GainResult>(cases.size()));
+  std::atomic<std::size_t> next{0}, done{0};
+  const std::size_t jobs = configs.size() * cases.size();
+  auto worker = [&] {
+    for (std::size_t j = next++; j < jobs; j = next++) {
+      parts[j / cases.size()][j % cases.size()] = runGains(tracks, cases[j % cases.size()], configs[j / cases.size()]);
+      const std::size_t d = ++done;
+      if (d % 500 == 0) {
+        std::fprintf(stderr, "\r  %zu/%zu competencias", d, jobs);
+      }
+    }
+  };
+  std::vector<std::thread> pool;
+  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
+  for (std::thread& t : pool) t.join();
+  std::fprintf(stderr, "\n");
+  std::vector<GainResult> totals(configs.size());
+  if (perTrack) perTrack->assign(configs.size(), std::vector<GainResult>(tracks.size()));
+  for (std::size_t i = 0; i < configs.size(); i++) {
+    for (std::size_t k = 0; k < cases.size(); k++) {
+      totals[i].add(parts[i][k]);
+      if (perTrack) (*perTrack)[i][cases[k].track].add(parts[i][k]);
+    }
+  }
+  return totals;
+}
+
+// Cumple: sin salidas y vueltas con mapa como mucho 3 % más lentas que la actual.
+bool acceptable(const GainResult& r, const GainResult& current) {
+  return r.failures == 0 && r.meanFastTime() <= current.meanFastTime() * 1.03;
+}
+
+bool smoother(const GainResult& a, const GainResult& b) {
+  if (std::abs(a.meanZigzag() - b.meanZigzag()) > 0.005) return a.meanZigzag() < b.meanZigzag();
+  return a.meanSteering() < b.meanSteering();
+}
+
+void printGains(const char* label, const Gains& g, const GainResult& r, const GainResult& current) {
+  std::printf("  %-10s seguro kp %.4f kd %.2f | rápido kp %.4f kd %.2f | salidas %3d  zigzag %.3f/m  dirección %.1f  "
+              "p95 %.1fmm  mapa %.2fs (%+.1f %%)\n",
+              label, g.safeKp, g.safeKd, g.fastKp, g.fastKd, r.failures, r.meanZigzag(), r.meanSteering(), r.meanP95(),
+              r.meanFastTime(), 100.0 * (r.meanFastTime() / current.meanFastTime() - 1.0));
+}
+
+int sweepGains() {
+  const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  // Referencia: las ganancias que tiene el código ahora (no valores fijos).
+  const atlas::RobotConfig safeNow = atlas::safeProfile(), fastNow = atlas::fastProfile();
+  const Gains current = {safeNow.control.kp, safeNow.control.kd, fastNow.control.kp, fastNow.control.kd};
+
+  // Etapa 1: hipercubo latino de 150 combinaciones (solo hacia abajo).
+  const int count = 150;
+  std::mt19937 random(31);
+  std::vector<std::vector<double>> strata(4, std::vector<double>(count));
+  for (auto& dim : strata) {
+    for (int i = 0; i < count; i++) dim[i] = (i + std::uniform_real_distribution<double>(0, 1)(random)) / count;
+    std::shuffle(dim.begin(), dim.end(), random);
+  }
+  std::vector<Gains> configs = {current};
+  for (int i = 0; i < count; i++) {
+    // Solo hacia abajo desde lo actual.
+    configs.push_back({0.0035 + strata[0][i] * (current.safeKp - 0.0035), 0.55 + strata[1][i] * (current.safeKd - 0.55),
+                       0.0035 + strata[2][i] * (current.fastKp - 0.0035), 0.55 + strata[3][i] * (current.fastKd - 0.55)});
+  }
+  const std::vector<Case> stage1 = makeCases(tracks, 300000, 4, true);
+  std::printf("Etapa 1: %zu combinaciones × %zu competencias = %zu\n", configs.size(), stage1.size(),
+              configs.size() * stage1.size());
+  std::fflush(stdout);
+  const std::vector<GainResult> r1 = runAllGains(tracks, stage1, configs);
+  long total = static_cast<long>(configs.size() * stage1.size());
+  std::vector<int> passing;
+  for (std::size_t i = 1; i < configs.size(); i++)
+    if (acceptable(r1[i], r1[0])) passing.push_back(static_cast<int>(i));
+  std::sort(passing.begin(), passing.end(), [&](int a, int b) { return smoother(r1[a], r1[b]); });
+  printGains("actual", configs[0], r1[0], r1[0]);
+  std::printf("  %zu de %d combinaciones cumplen (0 salidas, mapa <= +3 %%). Las 10 más suaves:\n", passing.size(), count);
+  if (passing.size() > 10) passing.resize(10);
+  for (int i : passing) printGains("", configs[i], r1[i], r1[0]);
+  std::fflush(stdout);
+  if (passing.empty()) {
+    std::printf("Ninguna combinación más baja cumple: se conservan kp/kd actuales.\n");
+    return 0;
+  }
+
+  // Etapa 2: refinamiento con semillas nuevas.
+  std::vector<Gains> finalists = {current};
+  for (int i : passing) finalists.push_back(configs[i]);
+  const std::vector<Case> stage2 = makeCases(tracks, 400000, 18, true);
+  std::printf("\nEtapa 2: %zu combinaciones × %zu competencias = %zu\n", finalists.size(), stage2.size(),
+              finalists.size() * stage2.size());
+  std::fflush(stdout);
+  const std::vector<GainResult> r2 = runAllGains(tracks, stage2, finalists);
+  total += static_cast<long>(finalists.size() * stage2.size());
+  std::vector<int> best2;
+  for (std::size_t i = 1; i < finalists.size(); i++)
+    if (acceptable(r2[i], r2[0])) best2.push_back(static_cast<int>(i));
+  std::sort(best2.begin(), best2.end(), [&](int a, int b) { return smoother(r2[a], r2[b]); });
+  printGains("actual", finalists[0], r2[0], r2[0]);
+  for (int i : best2) printGains("", finalists[i], r2[i], r2[0]);
+  std::fflush(stdout);
+  if (best2.empty()) {
+    std::printf("Ninguna combinación pasó la etapa 2: se conservan kp/kd actuales.\n");
+    return 0;
+  }
+  if (best2.size() > 3) best2.resize(3);
+
+  // Etapa 3: validación con semillas nunca usadas.
+  std::vector<Gains> last = {current};
+  for (int i : best2) last.push_back(finalists[i]);
+  const std::vector<Case> stage3 = makeCases(tracks, 500000, 45, true);
+  std::printf("\nEtapa 3 (validación): %zu combinaciones × %zu competencias = %zu\n", last.size(), stage3.size(),
+              last.size() * stage3.size());
+  std::fflush(stdout);
+  std::vector<std::vector<GainResult>> perTrack;
+  const std::vector<GainResult> r3 = runAllGains(tracks, stage3, last, &perTrack);
+  total += static_cast<long>(last.size() * stage3.size());
+  int winner = 0;
+  for (std::size_t i = 1; i < last.size(); i++) {
+    if (acceptable(r3[i], r3[0]) && (winner == 0 || smoother(r3[i], r3[winner]))) winner = static_cast<int>(i);
+  }
+  printGains("actual", last[0], r3[0], r3[0]);
+  for (std::size_t i = 1; i < last.size(); i++) printGains(static_cast<int>(i) == winner ? "GANADORA" : "", last[i], r3[i], r3[0]);
+  std::printf("\nTus pistas (validación):\n");
+  for (std::size_t t = 0; t < 2; t++) {
+    std::printf(" %s\n", tracks[t].track.name().c_str());
+    printGains("actual", last[0], perTrack[0][t], perTrack[0][t]);
+    if (winner) printGains("ganadora", last[winner], perTrack[winner][t], perTrack[0][t]);
+  }
+  std::printf("\nCompetencias simuladas en total: %ld\n", total);
+  if (winner == 0) std::printf("Ninguna superó la validación: se conservan kp/kd actuales.\n");
+  return 0;
+}
+
 }  // namespace gains
 
 }  // namespace
@@ -814,7 +1039,11 @@ int train(long budget) {
 int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
   if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
-  if (mode == "control") return gains::train(argc > 2 ? std::atol(argv[2]) : 25000);
-  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | control [competencias]\n");
+  if (mode == "control") {
+    const bool neutral = argc > 3 && std::string(argv[3]) == "neutra";
+    return gains::train(argc > 2 ? std::atol(argv[2]) : 25000, neutral);
+  }
+  if (mode == "ganancias") return gains::sweepGains();
+  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | control [competencias] | ganancias\n");
   return 1;
 }

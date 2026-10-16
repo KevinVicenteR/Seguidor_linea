@@ -10,8 +10,9 @@ RobotConfig safeProfile() { return RobotConfig(); }
 // simulation/tools/atlas_tune_learning sobre robots nominal, moderado y real.
 RobotConfig fastProfile() {
   RobotConfig config;
-  config.control.kp = 0.008f;  // suave pero con fuerza para curvas cerradas a alta velocidad
-  config.control.kd = 1.0f;
+  // Barrido de 32,406 competencias simuladas contra la oscilación (antes 0.008 / 1.0).
+  config.control.kp = 0.0068f;
+  config.control.kd = 0.99f;
   config.control.derivativeFilterShift = 1;
   config.control.curveSlowdownPercent = 0;  // el mapa ya decide la velocidad de cada tramo
   config.lostLine.outerMotorPwm = 201;
