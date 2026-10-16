@@ -5,7 +5,7 @@
   Red 6 -> 8 ReLU -> 2: % de kp y % de kd en marcha.
   Entrenada el 2026-10-15 por evolución en el simulador.
   Validación (99 competencias de 3 intentos, semillas nuevas):
-    sin red de control: salidas 0, tiempo medio 11.87 s, p95 38 mm, zigzag 1.63/m
+    sin red de control: salidas 0, tiempo medio 11.86 s, p95 38 mm, zigzag 1.61/m
     con red de control: salidas 0, tiempo medio 11.68 s, p95 36 mm, zigzag 1.38/m
 */
 #pragma once
