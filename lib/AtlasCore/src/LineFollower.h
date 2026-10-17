@@ -69,6 +69,11 @@ class LineFollower {
   // Última entrada y pesos de situación de la red jerárquica (registro y entrenamiento).
   const int8_t* neuralInputs() const { return neuralInputs_; }
   const uint8_t* situationWeights() const { return situationWeights_; }
+  // Entradas de la red de la derivada y la derivada filtrada clásica (para
+  // entrenar y comparar); número de ciclos de control de la carrera.
+  const int8_t* derivativeInputs() const { return derivativeInputs_; }
+  int32_t classicDerivative() const { return pd_.filteredDelta(); }
+  uint32_t controlCycles() const { return runTicks_; }
 
  private:
   int16_t currentVelocity(uint32_t nowMs) const;
@@ -89,8 +94,12 @@ class LineFollower {
   int16_t compensateDeadband(int16_t pwm) const;
   int16_t guidedVelocity(int16_t velocity) const;
   // Red de control: porcentaje de kp y kd para esta lectura.
+#ifndef ATLAS_NO_HIERARCHY
   void neuralGains(int32_t error, int16_t velocity, uint32_t nowMs, uint8_t* kpPercent, uint8_t* kdPercent);
+#endif
   uint8_t curvatureAhead() const;
+  void rememberError(int16_t error, int16_t velocity);
+  int32_t neuralDerivative() const;
   void trackDistance();
   void onGapEntered();
   void recordCurvature();
@@ -139,6 +148,10 @@ class LineFollower {
   int32_t lastError_ = 0;
   uint32_t reacquiredMs_ = 0;
   int8_t neuralInputs_[8] = {};
+  static constexpr uint8_t kErrorHistory = 17;  // error de los últimos 16 ciclos
+  int16_t errorHistory_[kErrorHistory] = {};
+  uint8_t historyCount_ = 0;
+  int8_t derivativeInputs_[7] = {};
   uint8_t situationWeights_[4] = {};
   LineReading reading_;
   MotorCommand command_;

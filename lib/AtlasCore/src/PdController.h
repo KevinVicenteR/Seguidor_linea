@@ -17,9 +17,14 @@ class PdController {
   int16_t update(int32_t error, uint8_t gainPercent = 100);
   // Porcentajes separados de kp y kd (red neuronal de control).
   int16_t update(int32_t error, uint8_t kpPercent, uint8_t kdPercent);
+  // D con una derivada externa (red de la derivada, unidades de error por
+  // ciclo). El filtro propio sigue actualizándose para poder alternar.
+  int16_t updateWithDerivative(int32_t error, int32_t derivative, uint8_t kpPercent, uint8_t kdPercent);
+  int32_t filteredDelta() const { return filteredDelta_; }
 
  private:
   void filterDelta(int32_t error);
+  int16_t combine(int32_t error, int32_t derivative, uint8_t kpPercent, uint8_t kdPercent) const;
   int16_t clampOutput(int32_t output) const;
 
   float kp_;

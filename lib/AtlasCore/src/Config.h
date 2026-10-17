@@ -85,6 +85,10 @@ struct ControlConfig {
   // Solo para la herramienta de entrenamiento: red a probar (nullptr = la de
   // NeuralHierarchyWeights.h).
   const NeuralHierarchy* hierarchy = nullptr;
+  // Red de la derivada (NeuralDerivativeWeights.h): estima qué tan rápido se
+  // mueve la línea bajo la barra con el historial del error (1-16 ciclos), sin
+  // el ruido ni el retraso del filtro del derivativo. Reemplaza al D filtrado.
+  bool neuralDerivative = false;
 };
 
 struct SpeedConfig {

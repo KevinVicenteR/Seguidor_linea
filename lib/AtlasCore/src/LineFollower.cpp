@@ -1,6 +1,9 @@
 #include "LineFollower.h"
 
+#include "NeuralDerivativeWeights.h"
+#ifndef ATLAS_NO_HIERARCHY
 #include "NeuralHierarchyWeights.h"
+#endif
 #include "TinyMlp.h"
 
 namespace atlas {
@@ -45,6 +48,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   drivetrain_.enable();
   pd_.reset();
   lastError_ = 0;
+  historyCount_ = 0;
   guard_.reset(nowMs);
   governor_.reset(nowMs);
   recovering_ = false;
@@ -104,6 +108,7 @@ void LineFollower::update(uint32_t nowMs) {
     if (recovering_) {
       pd_.reset();  // sin tirón del derivativo al recuperar la línea
       lastError_ = 0;
+      historyCount_ = 0;
       reacquiredMs_ = nowMs;
     }
     if (bridging_) {
@@ -253,14 +258,23 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   detectCorner(error, nowMs);
   if (guard_.update(error, nowMs)) governor_.penalize(config_->adaptive.speedDropOnOscillation, nowMs);
   governor_.recover(nowMs);
-  int16_t correction;
-  if (config_->control.neuralGains) {
-    uint8_t kpPercent;
-    uint8_t kdPercent;
+  rememberError(static_cast<int16_t>(error), velocity);
+  const ControlConfig& control = config_->control;
+  const uint16_t guard = guard_.gainPercent();
+  uint8_t kpPercent = static_cast<uint8_t>(guard);
+  uint8_t kdPercent = static_cast<uint8_t>(guard);
+#ifndef ATLAS_NO_HIERARCHY
+  if (control.neuralGains) {
     neuralGains(error, velocity, nowMs, &kpPercent, &kdPercent);
-    const uint16_t guard = guard_.gainPercent();
-    correction = pd_.update(error, static_cast<uint8_t>(kpPercent * guard / 100),
-                            static_cast<uint8_t>(kdPercent * guard / 100));
+    kpPercent = static_cast<uint8_t>(kpPercent * guard / 100);
+    kdPercent = static_cast<uint8_t>(kdPercent * guard / 100);
+  }
+#endif
+  int16_t correction;
+  if (control.neuralDerivative && historyCount_ >= kErrorHistory) {
+    correction = pd_.updateWithDerivative(error, neuralDerivative(), kpPercent, kdPercent);
+  } else if (control.neuralGains) {
+    correction = pd_.update(error, kpPercent, kdPercent);
   } else {
     correction = pd_.update(error, guard_.gainPercent());
   }
@@ -277,6 +291,7 @@ namespace {
 int8_t toInput(int16_t value) { return static_cast<int8_t>(value > 127 ? 127 : value); }
 }  // namespace
 
+#ifndef ATLAS_NO_HIERARCHY
 // Entradas (escala 0 ... 127): |error|, |cambio del error|, si se aleja (+) o
 // se acerca (-) a la línea, velocidad, curvatura del mapa más adelante,
 // auto-amortiguación, cruce u otra rama a la vista, y ms desde que se
@@ -300,6 +315,32 @@ void LineFollower::neuralGains(int32_t error, int16_t velocity, uint32_t nowMs, 
   input[7] = toInput(static_cast<int16_t>(sinceReacquired > 254 ? 127 : sinceReacquired >> 1));
   evaluateHierarchy(control.hierarchy != nullptr ? *control.hierarchy : neural::kHierarchy, input, kpPercent,
                     kdPercent, situationWeights_);
+}
+
+#endif  // ATLAS_NO_HIERARCHY
+
+// Historial del error y entradas de la red de la derivada: pendiente del error
+// sobre 1, 2, 4, 8 y 16 ciclos (en unidades/2 por ciclo), velocidad y |error|.
+__attribute__((noinline)) void LineFollower::rememberError(int16_t error, int16_t velocity) {
+  for (uint8_t i = kErrorHistory - 1; i > 0; i--) errorHistory_[i] = errorHistory_[i - 1];
+  errorHistory_[0] = error;
+  if (historyCount_ < kErrorHistory) historyCount_++;
+  // Intervalos de 2^k ciclos: dividir entre 2·2^k es desplazar k + 1 bits.
+  for (uint8_t k = 0; k < 5; k++) {
+    const uint8_t span = static_cast<uint8_t>(1 << k);
+    const int16_t slope = historyCount_ > span ? (error - errorHistory_[span]) >> (k + 1) : 0;
+    derivativeInputs_[k] = static_cast<int8_t>(slope > 127 ? 127 : (slope < -127 ? -127 : slope));
+  }
+  derivativeInputs_[5] = static_cast<int8_t>(velocity > 254 ? 127 : velocity >> 1);
+  const int16_t magnitude = error < 0 ? -error : error;
+  derivativeInputs_[6] = static_cast<int8_t>(magnitude >> 6 > 127 ? 127 : magnitude >> 6);
+}
+
+// Derivada estimada por la red, en unidades de error por ciclo de control.
+int32_t LineFollower::neuralDerivative() const {
+  int32_t derivative = 0;
+  TinyMlp(neural::kDerivativeNet).evaluate(derivativeInputs_, &derivative);
+  return derivative;
 }
 
 // Curva más cerrada de los próximos 5 tramos del mapa (0 si no hay mapa).

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "Config.h"
+#include "NeuralDerivativeWeights.h"
 
 namespace atlas {
 
@@ -36,9 +37,13 @@ constexpr RobotConfig fastProfile() {
 
 // Redes neuronales (NeuralPositionWeights.h): true = activas, false = control
 // clásico idéntico al anterior.
+// La red jerárquica de control quedó neutra tras entrenarla (no superó a la
+// referencia): se apaga para no gastar tiempo de cálculo. La red de la
+// derivada solo se activa cuando ya fue entrenada.
 constexpr void useNeuralNetworks(RobotConfig& config, bool enabled) {
   config.sensors.neuralPosition = enabled;
-  config.control.neuralGains = enabled;
+  config.control.neuralGains = false;
+  config.control.neuralDerivative = enabled && neural::kDerivativeTrained;
 }
 
 }  // namespace atlas
