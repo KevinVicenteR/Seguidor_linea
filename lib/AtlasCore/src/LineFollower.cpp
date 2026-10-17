@@ -47,6 +47,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
 
   drivetrain_.enable();
   pd_.reset();
+  predictor_.reset();
   lastError_ = 0;
   historyCount_ = 0;
   guard_.reset(nowMs);
@@ -107,6 +108,7 @@ void LineFollower::update(uint32_t nowMs) {
   if (reading_.isTrackable()) {
     if (recovering_) {
       pd_.reset();  // sin tirón del derivativo al recuperar la línea
+      predictor_.reset();
       lastError_ = 0;
       historyCount_ = 0;
       reacquiredMs_ = nowMs;
@@ -270,14 +272,20 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
     kdPercent = static_cast<uint8_t>(kdPercent * guard / 100);
   }
 #endif
+  // El PD ve el error que habrá cuando llegue la corrección ya mandada.
+  const int32_t pdError =
+      control.latencyCompensation
+          ? error - predictor_.pendingErrorShift(control.predictorShift, control.predictorGain)
+          : error;
   int16_t correction;
   if (control.neuralDerivative && historyCount_ >= kErrorHistory) {
-    correction = pd_.updateWithDerivative(error, neuralDerivative(), kpPercent, kdPercent);
+    correction = pd_.updateWithDerivative(pdError, neuralDerivative(), kpPercent, kdPercent);
   } else if (control.neuralGains) {
-    correction = pd_.update(error, kpPercent, kdPercent);
+    correction = pd_.update(pdError, kpPercent, kdPercent);
   } else {
-    correction = pd_.update(error, guard_.gainPercent());
+    correction = pd_.update(pdError, guard_.gainPercent());
   }
+  predictor_.remember(correction);
   lastError_ = error;
   const int16_t base = slowDownForCurve(scaleForCorner(velocity, nowMs), error);
 

@@ -10,6 +10,7 @@
 
 #include "Config.h"
 #include "Hal.h"
+#include "LatencyPredictor.h"
 #include "LineSensorArray.h"
 #include "OscillationGuard.h"
 #include "PdController.h"
@@ -110,6 +111,7 @@ class LineFollower {
   IDrivetrain& drivetrain_;
   const RobotConfig* config_;
   PdController pd_;
+  LatencyPredictor predictor_;
   OscillationGuard guard_;
   SpeedGovernor governor_;
   SpeedPlanner planner_;

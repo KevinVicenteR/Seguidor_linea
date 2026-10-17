@@ -27,6 +27,7 @@
        atlas_train_nn ganancias
        atlas_train_nn derivada [ciclos] [adelanto] [escribir]
        atlas_train_nn derivada-prueba [semillas por pista y modelo]
+       atlas_train_nn predictor [semillas]   (busca el predictor de retraso)
 */
 #include <algorithm>
 #include <atomic>
@@ -36,6 +37,7 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <random>
 #include <string>
@@ -1021,10 +1023,20 @@ struct Outcome {
   double meanFastTime() const { return fastLaps ? fastTime / fastLaps : 0; }
 };
 
-Outcome runCase(const std::vector<TrackEntry>& tracks, const Case& c, bool neuralDerivative) {
+// Variante del firmware a probar: modifica los ajustes de ambos perfiles.
+struct Variant {
+  std::string label;
+  std::function<void(atlas::RobotConfig&)> tweak;
+};
+
+Outcome runCase(const std::vector<TrackEntry>& tracks, const Case& c, const Variant& v) {
   atlas::RobotConfig safe = atlas::firmwareSafeConfig(true), fast = atlas::firmwareFastConfig(true);
   safe.control.neuralGains = fast.control.neuralGains = false;
-  safe.control.neuralDerivative = fast.control.neuralDerivative = neuralDerivative;
+  safe.control.neuralDerivative = fast.control.neuralDerivative = false;
+  if (v.tweak) {
+    v.tweak(safe);
+    v.tweak(fast);
+  }
   ScenarioSpec spec;
   spec.trackIndex = c.track;
   spec.cruisePwm = safe.speed.basePwm;
@@ -1054,9 +1066,78 @@ Outcome runCase(const std::vector<TrackEntry>& tracks, const Case& c, bool neura
 }
 
 void printOutcome(const char* label, const Outcome& o, const Outcome& reference) {
-  std::printf("  %-24s salidas %3d  zigzag±10mm %.3f/m  dirección %5.1f  mapa %6.2fs (%+.1f %%)\n", label, o.failures,
+  std::printf("  %-26s salidas %3d  zigzag±10mm %.3f/m  dirección %5.1f  mapa %6.2fs (%+.1f %%)\n", label, o.failures,
               o.meanZigzag(), o.meanSteering(), o.meanFastTime(),
               reference.meanFastTime() > 0 ? 100.0 * (o.meanFastTime() / reference.meanFastTime() - 1.0) : 0.0);
+}
+
+// [variante][pista][modelo]
+using Table = std::vector<std::vector<std::vector<Outcome>>>;
+
+Table runVariants(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases,
+                  const std::vector<Variant>& variants) {
+  std::vector<Outcome> parts(variants.size() * cases.size());
+  std::atomic<std::size_t> next{0};
+  auto worker = [&] {
+    for (std::size_t j = next++; j < parts.size(); j = next++)
+      parts[j] = runCase(tracks, cases[j % cases.size()], variants[j / cases.size()]);
+  };
+  std::vector<std::thread> pool;
+  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
+  for (std::thread& t : pool) t.join();
+  Table table(variants.size(), std::vector<std::vector<Outcome>>(tracks.size(), std::vector<Outcome>(3)));
+  for (std::size_t j = 0; j < parts.size(); j++) {
+    const Case& c = cases[j % cases.size()];
+    table[j / cases.size()][c.track][c.model].add(parts[j]);
+  }
+  return table;
+}
+
+Outcome total(const std::vector<std::vector<Outcome>>& byTrack) {
+  Outcome o;
+  for (const auto& models : byTrack)
+    for (const Outcome& m : models) o.add(m);
+  return o;
+}
+
+// Restricciones por pista y modelo: sin salidas extra y mapa <= +3 %.
+bool meetsLimits(const std::vector<TrackEntry>& tracks, const Table& table, std::size_t v, bool print) {
+  bool ok = true;
+  const char* models[] = {"nominal", "moderado", "real"};
+  for (std::size_t t = 0; t < tracks.size(); t++) {
+    for (int m = 0; m < 3; m++) {
+      const Outcome& a = table[0][t][m];
+      const Outcome& b = table[v][t][m];
+      if (a.laps + a.failures == 0) continue;
+      const double slower = a.meanFastTime() > 0 ? b.meanFastTime() / a.meanFastTime() - 1.0 : 0.0;
+      const bool pass = b.failures <= a.failures && slower <= 0.03;
+      ok = ok && pass;
+      if (print)
+        std::printf("  %-28s %-9s salidas %2d->%2d  zigzag %.3f->%.3f  mapa %6.2f->%6.2fs (%+.1f %%)%s\n",
+                    tracks[t].track.name().c_str(), models[m], a.failures, b.failures, a.meanZigzag(), b.meanZigzag(),
+                    a.meanFastTime(), b.meanFastTime(), 100.0 * slower, pass ? "" : "  <- NO CUMPLE");
+    }
+  }
+  return ok;
+}
+
+// Compara la variante 0 (referencia) con las demás; detalle por pista de `detail`.
+int compare(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases, const std::vector<Variant>& variants,
+            std::size_t detail) {
+  const Table table = runVariants(tracks, cases, variants);
+  const Outcome reference = total(table[0]);
+  std::printf("Lazo cerrado: %zu competencias por variante (3 intentos cada una)\n", cases.size());
+  for (std::size_t v = 0; v < variants.size(); v++) {
+    const bool ok = v == 0 || meetsLimits(tracks, table, v, false);
+    printOutcome(variants[v].label.c_str(), total(table[v]), reference);
+    if (v > 0) std::printf("%s", ok ? "" : "      (no cumple en alguna pista/modelo)\n");
+  }
+  if (detail == 0 || detail >= variants.size()) return 0;
+  std::printf("\nPor pista y modelo (%s -> %s):\n", variants[0].label.c_str(), variants[detail].label.c_str());
+  const bool ok = meetsLimits(tracks, table, detail, true);
+  std::printf("\n%s\n", ok ? "Cumple por pista y modelo (sin salidas extra, mapa <= +3 %)."
+                           : "No cumple en todas las pistas y modelos.");
+  return ok ? 0 : 2;
 }
 
 int testDerivative(int seedsPerTrack) {
@@ -1065,46 +1146,53 @@ int testDerivative(int seedsPerTrack) {
     return 1;
   }
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
-  const std::vector<Case> cases = makeCases(tracks, 777000, seedsPerTrack, true);
-  std::vector<Outcome> parts(2 * cases.size());
-  std::atomic<std::size_t> next{0};
-  auto worker = [&] {
-    for (std::size_t j = next++; j < parts.size(); j = next++) parts[j] = runCase(tracks, cases[j / 2], j % 2 == 1);
-  };
-  std::vector<std::thread> pool;
-  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
-  for (std::thread& t : pool) t.join();
+  const std::vector<Variant> variants = {
+      {"D clásico", nullptr},
+      {"red de la derivada", [](atlas::RobotConfig& c) { c.control.neuralDerivative = true; }}};
+  return compare(tracks, makeCases(tracks, 777000, seedsPerTrack, true), variants, 1);
+}
 
-  // [configuración][pista][modelo]
-  std::vector<std::vector<std::vector<Outcome>>> table(2, std::vector<std::vector<Outcome>>(tracks.size(), std::vector<Outcome>(3)));
-  Outcome total[2];
-  for (std::size_t j = 0; j < parts.size(); j++) {
-    const Case& c = cases[j / 2];
-    table[j % 2][c.track][c.model].add(parts[j]);
-    total[j % 2].add(parts[j]);
+// Predictor de retraso: rejilla de shift × ganancia con semillas de búsqueda;
+// las 3 mejores que cumplen se confirman con semillas nuevas.
+int testPredictor(int seedsPerTrack) {
+  const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  auto predictor = [](uint8_t shift, int8_t gain) {
+    char label[48];
+    std::snprintf(label, sizeof(label), "predictor 2^%d gan %+d", shift, gain);
+    return Variant{label, [shift, gain](atlas::RobotConfig& c) {
+                     c.control.latencyCompensation = true;
+                     c.control.predictorShift = shift;
+                     c.control.predictorGain = gain;
+                   }};
+  };
+  std::vector<Variant> grid = {{"sin predictor", nullptr}};
+  for (uint8_t shift : {5, 6, 7, 8, 9})
+    for (int8_t gain : {-2, -3, -4, -5, -6}) grid.push_back(predictor(shift, gain));
+  const std::vector<Case> search = makeCases(tracks, 555000, seedsPerTrack, true);
+  std::printf("Búsqueda: %zu variantes\n", grid.size());
+  std::fflush(stdout);
+  const Table table = runVariants(tracks, search, grid);
+  const Outcome reference = total(table[0]);
+  printOutcome(grid[0].label.c_str(), reference, reference);
+  std::vector<std::size_t> passing;
+  for (std::size_t v = 1; v < grid.size(); v++) {
+    const Outcome o = total(table[v]);
+    const bool ok = meetsLimits(tracks, table, v, false);
+    printOutcome(grid[v].label.c_str(), o, reference);
+    if (ok && o.meanZigzag() < reference.meanZigzag()) passing.push_back(v);
   }
-  std::printf("Prueba en lazo cerrado: %zu competencias por configuración (3 intentos cada una)\n", cases.size());
-  printOutcome("D clásico (total)", total[0], total[0]);
-  printOutcome("red de la derivada", total[1], total[0]);
-  bool ok = true;
-  const char* models[] = {"nominal", "moderado", "real"};
-  std::printf("\nPor pista y modelo (clásico -> red):\n");
-  for (std::size_t t = 0; t < tracks.size(); t++) {
-    for (int m = 0; m < 3; m++) {
-      const Outcome& a = table[0][t][m];
-      const Outcome& b = table[1][t][m];
-      if (a.laps + a.failures == 0) continue;
-      const double slower = a.meanFastTime() > 0 ? b.meanFastTime() / a.meanFastTime() - 1.0 : 0.0;
-      const bool pass = b.failures <= a.failures && slower <= 0.03;
-      ok = ok && pass;
-      std::printf("  %-26s %-9s salidas %2d->%2d  zigzag %.3f->%.3f  mapa %6.2f->%6.2fs (%+.1f %%)%s\n",
-                  tracks[t].track.name().c_str(), models[m], a.failures, b.failures, a.meanZigzag(), b.meanZigzag(),
-                  a.meanFastTime(), b.meanFastTime(), 100.0 * slower, pass ? "" : "  <- NO CUMPLE");
-    }
+  std::fflush(stdout);
+  std::sort(passing.begin(), passing.end(),
+            [&](std::size_t a, std::size_t b) { return total(table[a]).meanZigzag() < total(table[b]).meanZigzag(); });
+  if (passing.empty()) {
+    std::printf("\nNinguna variante baja el zigzag cumpliendo los límites.\n");
+    return 2;
   }
-  std::printf("\n%s\n", ok ? "Cumple por pista y modelo (sin salidas extra, mapa <= +3 %)."
-                           : "No cumple en todas las pistas y modelos.");
-  return ok ? 0 : 2;
+  if (passing.size() > 3) passing.resize(3);
+  std::vector<Variant> finalists = {grid[0]};
+  for (std::size_t v : passing) finalists.push_back(grid[v]);
+  std::printf("\nConfirmación con semillas nuevas:\n");
+  return compare(tracks, makeCases(tracks, 888000, seedsPerTrack * 2, true), finalists, 1);
 }
 
 }  // namespace gains
@@ -1115,6 +1203,7 @@ int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
   if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
   if (mode == "ganancias") return gains::sweepGains();
+  if (mode == "predictor") return gains::testPredictor(argc > 2 ? std::atoi(argv[2]) : 2);
   if (mode == "derivada-prueba") return gains::testDerivative(argc > 2 ? std::atoi(argv[2]) : 3);
   if (mode == "derivada") {
     const std::size_t samples = argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 400000;
