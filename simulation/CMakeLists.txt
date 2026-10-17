@@ -51,3 +51,8 @@ target_link_libraries(atlas_tune_learning PRIVATE atlas_sim_lib Threads::Threads
 add_executable(atlas_train_nn tools/atlas_train_nn.cpp)
 target_link_libraries(atlas_train_nn PRIVATE atlas_sim_lib Threads::Threads)
 target_compile_definitions(atlas_train_nn PRIVATE ATLAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# Entrenamiento de la red jerárquica de control (principal + 4 subneuronas).
+add_executable(atlas_train_hierarchy tools/atlas_train_hierarchy.cpp)
+target_link_libraries(atlas_train_hierarchy PRIVATE atlas_sim_lib Threads::Threads)
+target_compile_definitions(atlas_train_hierarchy PRIVATE ATLAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
