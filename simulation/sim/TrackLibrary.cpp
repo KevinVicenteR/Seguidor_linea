@@ -247,6 +247,99 @@ TrackEntry practiceTrack() {
 
 Vec2 competitionGapCenter() { return Vec2{337.5 * 3.66 / 995.0, (678.0 - 648.0) * 3.66 / 995.0}; }
 
+//  ---------------------------------------------------------------------------
+//  Pistas extremas
+//  ---------------------------------------------------------------------------
+
+TrackEntry extremeHairpins() {
+  constexpr double kTop = 2.0, kLow = 0.6, kGap = 0.25, kHairpin = 0.11;
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.3).corner(5.0, 0, 0.3);
+  double x = 5.0;
+  for (int k = 0; k < 6; k++) {
+    b.corner(x, kTop, kHairpin).corner(x - kGap, kTop, kHairpin);
+    b.corner(x - kGap, kLow, kHairpin).corner(x - 2 * kGap, kLow, kHairpin);
+    x -= 2 * kGap;
+  }
+  b.corner(x, kTop, 0.3).corner(0, kTop, 0.3);
+  return makeEntry(Track("Extrema: horquillas de 11 cm", "12 horquillas de 180° con radio de 11 cm separadas 25 cm.", b.build()),
+                   {1.0, 0.0});
+}
+
+TrackEntry extremeRightAngles() {
+  FilletedLoopBuilder b;
+  b.sharp(0, 0).sharp(4.0, 0);
+  for (int k = 0; k < 6; k++) {
+    b.sharp(4.0 - 0.3 * k, 0.3 * (k + 1)).sharp(4.0 - 0.3 * (k + 1), 0.3 * (k + 1));
+  }
+  b.sharp(0, 1.8);
+  return makeEntry(Track("Extrema: escalera de 90°", "Doce esquinas de 90° sin radio separadas 30 cm.", b.build()), {1.5, 0.0});
+}
+
+TrackEntry extremePeaks() {
+  // Picos y valles de ~30°: medio ancho 0.19 m sobre 0.7 m de alto.
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.25).corner(4.0, 0, 0.25);
+  double x = 4.0;
+  b.sharp(x, 1.1);
+  for (int k = 0; k < 4; k++) {
+    b.sharp(x - 0.19, 1.8).sharp(x - 0.38, 1.1);
+    x -= 0.38;
+  }
+  b.corner(0, 1.1, 0.25);
+  return makeEntry(Track("Extrema: picos de 30°", "Cuatro picos y valles de 30° seguidos (la barra ve ambas ramas).", b.build()),
+                   {2.0, 0.0});
+}
+
+TrackEntry extremeCornerDashes() {
+  const Vec2 corners[] = {{0, 0}, {3.5, 0}, {3.5, 2.0}, {0, 2.0}};
+  FilletedLoopBuilder b;
+  for (const Vec2& c : corners) b.sharp(c.x, c.y);
+  std::vector<TrackGap> gaps;
+  for (int i = 0; i < 4; i++) {
+    const Vec2 c = corners[i];
+    const Vec2 dir = (corners[(i + 1) % 4] - c).normalized();
+    for (int k = 0; k < 3; k++) {
+      const double start = 0.15 + k * 0.115;  // punteado justo después de cada esquina
+      gaps.push_back({c + dir * start, c + dir * (start + 0.045)});
+    }
+  }
+  Track track("Extrema: esquinas con punteado", "Cuatro esquinas de 90°, cada una seguida de tres huecos de 4.5 cm.",
+              b.build(), Track::kStandardLineWidth, gaps);
+  return makeEntry(std::move(track), {1.5, 0.0});
+}
+
+TrackEntry extremeShallowCrossing() {
+  FilletedLoopBuilder b;
+  // Diagonales con pendiente 0.8/3 (cruce a 30°) y lóbulos de esquinas redondeadas.
+  b.corner(-1.5, 0.4, 0.3).corner(1.5, -0.4, 0.3).corner(2.3, -0.4, 0.35).corner(2.3, 0.4, 0.35);
+  b.corner(1.5, 0.4, 0.3).corner(-1.5, -0.4, 0.3).corner(-2.3, -0.4, 0.35).corner(-2.3, 0.4, 0.35);
+  return makeEntry(Track("Extrema: cruce a 30°", "Ocho alargado: las diagonales se cruzan a solo 30°.", b.build()), {-0.75, 0.2});
+}
+
+TrackEntry extremeFastEsses() {
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.5).sharp(1.0, 0);
+  double x = 1.0;
+  for (int k = 0; k < 6; k++) {
+    x += 0.35;
+    b.corner(x, k % 2 == 0 ? 0.18 : -0.18, 0.12);
+  }
+  b.sharp(x + 0.35, 0).corner(4.5, 0, 0.5).corner(4.5, 1.6, 0.5).corner(0, 1.6, 0.5);
+  return makeEntry(Track("Extrema: eses rápidas", "Seis eses de radio 12 cm después de una recta larga.", b.build()), {0.5, 0.0});
+}
+
+std::vector<TrackEntry> buildExtremeTrackLibrary() {
+  std::vector<TrackEntry> library;
+  library.push_back(extremeHairpins());
+  library.push_back(extremeRightAngles());
+  library.push_back(extremePeaks());
+  library.push_back(extremeCornerDashes());
+  library.push_back(extremeShallowCrossing());
+  library.push_back(extremeFastEsses());
+  return library;
+}
+
 std::vector<TrackEntry> buildTrackLibrary() {
   std::vector<TrackEntry> library;
   library.push_back(competitionTrack());

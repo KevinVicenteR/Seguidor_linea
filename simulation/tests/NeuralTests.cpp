@@ -1,6 +1,7 @@
 #include "Fakes.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
+#include "NeuralHierarchy.h"
 #include "PdController.h"
 #include "TestFramework.h"
 #include "TinyMlp.h"
@@ -111,18 +112,27 @@ TEST("PD con kp y kd separados al mismo % que la versión de un solo %") {
 
 namespace {
 
-// Red de control con salida fija: sesgo enorme o muy negativo, sin pesos.
-struct ConstantGainNet {
-  int8_t w1[6] = {};
+// Red jerárquica con salida fija: principal con pesos iguales (o solo la
+// situación `only`), expertos que dan `percent` (o 100 los demás).
+struct ConstantHierarchy {
+  int8_t w1[kHierarchyInputs] = {};
   int32_t b1[1] = {};
-  int16_t w2[2] = {};
-  int32_t b2[2];
-  TinyMlpWeights weights;
-  explicit ConstantGainNet(int32_t percent)
-      : b2{percent << 8, percent << 8}, weights{6, 1, 2, w1, b1, 0, w2, b2, 8} {}
+  int16_t w2[kSituations] = {};
+  int32_t gateBias[kSituations];
+  int32_t expertBias[kSituations][2];
+  NeuralHierarchy net;
+  ConstantHierarchy(int32_t percent, int only = -1) : net{} {
+    for (int k = 0; k < kSituations; k++) {
+      gateBias[k] = (only < 0 || only == k) ? (64 << 8) : 0;
+      const int32_t p = (only < 0 || only == k) ? percent : 100;
+      expertBias[k][0] = expertBias[k][1] = p << 8;
+      net.experts[k] = {kHierarchyInputs, 1, 2, w1, b1, 0, w2, expertBias[k], 8};
+    }
+    net.gate = {kHierarchyInputs, 1, kSituations, w1, b1, 0, w2, gateBias, 8};
+  }
 };
 
-int16_t steeringWith(const TinyMlpWeights* network, bool neural) {
+int16_t steeringWith(const NeuralHierarchy* network, bool neural) {
   test::FakeSensorBus bus;
   test::FakeDrivetrain drivetrain;
   RobotConfig config;
@@ -133,7 +143,7 @@ int16_t steeringWith(const TinyMlpWeights* network, bool neural) {
   config.control.curveSlowdownPercent = 0;
   config.adaptive.autoDamping = false;
   config.control.neuralGains = neural;
-  config.control.gainNetwork = network;
+  config.control.hierarchy = network;
   LineSensorArray sensors(bus, config.sensors);
   LineFollower follower(sensors, drivetrain, config);
   calibrate(sensors, bus);
@@ -147,14 +157,28 @@ int16_t steeringWith(const TinyMlpWeights* network, bool neural) {
 
 }  // namespace
 
-TEST("Red de control: la corrección nunca pasa del 130 % ni baja del 70 %") {
+TEST("Red jerárquica: la corrección nunca pasa del 130 % ni baja del 70 %") {
   const int16_t nominal = steeringWith(nullptr, false);
-  ConstantGainNet huge(1000), tiny(-1000), neutral(100);
-  const int16_t high = steeringWith(&huge.weights, true);
-  const int16_t low = steeringWith(&tiny.weights, true);
-  EXPECT_NEAR(steeringWith(&neutral.weights, true), nominal, 1);
-  EXPECT_NEAR(high, nominal * 13 / 10, 2);
-  EXPECT_NEAR(low, nominal * 7 / 10, 2);
+  ConstantHierarchy huge(1000), tiny(-1000), neutral(100);
+  EXPECT_NEAR(steeringWith(&neutral.net, true), nominal, 1);
+  EXPECT_NEAR(steeringWith(&huge.net, true), nominal * 13 / 10, 2);
+  EXPECT_NEAR(steeringWith(&tiny.net, true), nominal * 7 / 10, 2);
+}
+
+TEST("Red jerárquica: la principal elige qué subneurona manda") {
+  const int8_t input[kHierarchyInputs] = {};
+  for (int k = 0; k < kSituations; k++) {
+    ConstantHierarchy only(80, k);
+    uint8_t kp = 0, kd = 0, weights[kSituations];
+    evaluateHierarchy(only.net, input, &kp, &kd, weights);
+    EXPECT_EQ(kp, 80);
+    EXPECT_EQ(kd, 80);
+    for (int j = 0; j < kSituations; j++) EXPECT_EQ(weights[j] > 0, j == k);
+  }
+  ConstantHierarchy mixed(80);  // las 4 pesan igual y dan 80: mezcla = 80
+  uint8_t kp = 0, kd = 0;
+  evaluateHierarchy(mixed.net, input, &kp, &kd);
+  EXPECT_EQ(kp, 80);
 }
 
 // La misma factoría se usa en AVR y en --firmware, también para el control clásico.

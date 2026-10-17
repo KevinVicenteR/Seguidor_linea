@@ -10,12 +10,7 @@
     Entrena en double (Adam), cuantiza a enteros como los usa TinyMlp, compara
     con el promedio ponderado y escribe lib/AtlasCore/src/NeuralPositionWeights.h.
 
-  control: red que ajusta en marcha el % de kp y kd (70-130 %) según el error,
-    su cambio, la velocidad y la curva del mapa. Se entrena por evolución
-    (estrategia evolutiva con muestreo antitético y Adam): cada candidato corre
-    los 3 intentos en las pistas de competencia, práctica, Gran Premio y
-    Hexágono con 3 modelos de robot. Aptitud = tiempo + error p95 + zigzag,
-    con fuerte castigo por salirse. Escribe NeuralGainWeights.h.
+  (La red de control jerárquica se entrena con atlas_train_hierarchy.)
 
   ganancias: barrido de kp/kd (solo hacia abajo) para quitar oscilación con
     los ajustes de FirmwareConfig.h: hipercubo latino, refinamiento y
@@ -23,7 +18,6 @@
     las vueltas con mapa <= 103 % del actual; gana el menor zigzag.
 
   Uso: atlas_train_nn posicion [lecturas]     (25000 por defecto)
-       atlas_train_nn control [competencias] [neutra]   (25000 por defecto)
        atlas_train_nn ganancias
 */
 #include <algorithm>
@@ -42,7 +36,6 @@
 
 #include "FirmwareConfig.h"
 #include "LineSensorArray.h"
-#include "NeuralGainWeights.h"
 #include "NeuralPositionWeights.h"
 #include "Profiles.h"
 #include "ScenarioRunner.h"
@@ -520,37 +513,10 @@ int trainPosition(std::size_t samples) {
 }
 
 //  ---------------------------------------------------------------------------
-//  Red de control (neuroevolución)
+//  Casos de evaluación comunes (pistas × modelos de robot × semillas)
 //  ---------------------------------------------------------------------------
 
 namespace gains {
-
-constexpr int kIn = atlas::neural::kGainInputs;
-constexpr int kHid = atlas::neural::kGainHidden;
-constexpr int kOut = atlas::neural::kGainOutputs;
-constexpr int kParams = kHid * kIn + kHid + kOut * kHid + kOut;
-
-// Parámetros reales del optimizador -> enteros que usa TinyMlp.
-struct Net {
-  int8_t w1[kHid * kIn];
-  int32_t b1[kHid];
-  int16_t w2[kOut * kHid];
-  int32_t b2[kOut];
-  atlas::TinyMlpWeights view() const {
-    return {static_cast<uint8_t>(kIn), static_cast<uint8_t>(kHid), static_cast<uint8_t>(kOut), w1, b1,
-            atlas::neural::kGainShift1, w2, b2, atlas::neural::kGainShift2};
-  }
-};
-
-Net decode(const std::vector<double>& theta) {
-  Net n;
-  int k = 0;
-  for (int i = 0; i < kHid * kIn; i++) n.w1[i] = static_cast<int8_t>(std::max(-127L, std::min(127L, std::lround(theta[k++] * 24))));
-  for (int i = 0; i < kHid; i++) n.b1[i] = static_cast<int32_t>(std::lround(theta[k++] * 3000));
-  for (int i = 0; i < kOut * kHid; i++) n.w2[i] = static_cast<int16_t>(std::max(-32767L, std::min(32767L, std::lround(theta[k++] * 24))));
-  for (int i = 0; i < kOut; i++) n.b2[i] = (100L << atlas::neural::kGainShift2) + static_cast<int32_t>(std::lround(theta[k++] * 2560));
-  return n;
-}
 
 struct Case {
   std::size_t track;
@@ -572,82 +538,6 @@ RobotParams robotModel(int model) {
   return p;
 }
 
-// Peso del zigzag en la aptitud: alto para que la red no meta oscilación.
-constexpr double kZigzagWeight = 1.0;
-
-struct Score {
-  double cost = 0;
-  int failures = 0;
-  double time = 0, p95 = 0, zigzag = 0;
-  int laps = 0;
-};
-
-// Los 3 intentos de una competencia con la configuración de src/main.cpp.
-Score evaluateCase(const std::vector<TrackEntry>& tracks, const Case& c, const atlas::TinyMlpWeights* weights) {
-  atlas::RobotConfig safe = atlas::safeProfile(), fast = atlas::fastProfile();
-  atlas::useNeuralNetworks(safe, true);
-  atlas::useNeuralNetworks(fast, true);
-  if (weights == nullptr) {  // red de control neutra (100 %): solo la red de posición
-    safe.control.neuralGains = false;
-    fast.control.neuralGains = false;
-  }
-  safe.control.gainNetwork = weights;
-  fast.control.gainNetwork = weights;
-  ScenarioSpec spec;
-  spec.trackIndex = c.track;
-  spec.cruisePwm = 170;
-  spec.seed = c.seed;
-  spec.learnTrack = true;
-  spec.attempts = 3;
-  spec.impellerPwm = 190;
-  spec.fastImpellerPwm = 235;
-  const std::vector<ScenarioResult> attempts =
-      ScenarioRunner(robotModel(c.model), SensorModel(), safe, fast).runAttempts(tracks[c.track], spec);
-  Score s;
-  const double weight = c.model == 2 ? 1.5 : 1.0;  // el robot "real" pesa más
-  for (const ScenarioResult& r : attempts) {
-    if (!r.passed()) {
-      s.failures++;
-      s.cost += 300.0 * weight;
-      continue;
-    }
-    s.cost += weight * (r.raceTime + 0.04 * r.p95OffsetMm + kZigzagWeight * r.zigzagPerMeter);
-    s.time += r.raceTime;
-    s.p95 += r.p95OffsetMm;
-    s.zigzag += r.zigzagPerMeter;
-    s.laps++;
-  }
-  return s;
-}
-
-// Evalúa varios candidatos sobre los mismos casos, en paralelo.
-std::vector<Score> evaluateAll(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases,
-                               const std::vector<const atlas::TinyMlpWeights*>& candidates) {
-  std::vector<Score> totals(candidates.size());
-  std::vector<std::vector<Score>> parts(candidates.size(), std::vector<Score>(cases.size()));
-  std::atomic<std::size_t> next{0};
-  const std::size_t jobs = candidates.size() * cases.size();
-  auto worker = [&] {
-    for (std::size_t j = next++; j < jobs; j = next++) {
-      parts[j / cases.size()][j % cases.size()] = evaluateCase(tracks, cases[j % cases.size()], candidates[j / cases.size()]);
-    }
-  };
-  std::vector<std::thread> pool;
-  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
-  for (std::thread& t : pool) t.join();
-  for (std::size_t i = 0; i < candidates.size(); i++) {
-    for (const Score& p : parts[i]) {
-      totals[i].cost += p.cost;
-      totals[i].failures += p.failures;
-      totals[i].time += p.time;
-      totals[i].p95 += p.p95;
-      totals[i].zigzag += p.zigzag;
-      totals[i].laps += p.laps;
-    }
-  }
-  return totals;
-}
-
 std::vector<Case> makeCases(const std::vector<TrackEntry>& tracks, uint32_t seedBase, int seedsPerTrack,
                             bool allTracks) {
   std::vector<Case> cases;
@@ -661,170 +551,6 @@ std::vector<Case> makeCases(const std::vector<TrackEntry>& tracks, uint32_t seed
     }
   }
   return cases;
-}
-
-void printScore(const char* label, const Score& s) {
-  const double laps = std::max(1, s.laps);
-  std::printf("  %-22s costo %8.1f  salidas %2d  tiempo medio %.2fs  p95 %.1fmm  zigzag %.2f/m\n", label, s.cost,
-              s.failures, s.time / laps, s.p95 / laps, s.zigzag / laps);
-}
-
-template <typename T>
-std::string list(const T* values, int count, int perLine) {
-  return join(values, count, perLine);
-}
-
-void writeGainHeader(const std::string& path, const Net& n, const Score& neutral, const Score& trained, int cases) {
-  char date[32];
-  const std::time_t now = std::time(nullptr);
-  std::strftime(date, sizeof(date), "%Y-%m-%d", std::localtime(&now));
-  const double nl = std::max(1, neutral.laps), tl = std::max(1, trained.laps);
-  std::ofstream out(path);
-  out << "/*\n"
-      << "  NeuralGainWeights.h - GENERADO por simulation/tools/atlas_train_nn.cpp\n"
-      << "  (atlas_train_nn control). No editar a mano.\n\n"
-      << "  Red " << kIn << " -> " << kHid << " ReLU -> " << kOut << ": % de kp y % de kd en marcha.\n"
-      << "  Entrenada el " << date << " por evolución en el simulador.\n"
-      << "  Validación (" << cases << " competencias de 3 intentos, semillas nuevas):\n"
-      << "    sin red de control: salidas " << neutral.failures << ", tiempo medio " << std::lround(neutral.time / nl * 100) / 100.0
-      << " s, p95 " << std::lround(neutral.p95 / nl) << " mm, zigzag " << std::lround(neutral.zigzag / nl * 100) / 100.0 << "/m\n"
-      << "    con red de control: salidas " << trained.failures << ", tiempo medio " << std::lround(trained.time / tl * 100) / 100.0
-      << " s, p95 " << std::lround(trained.p95 / tl) << " mm, zigzag " << std::lround(trained.zigzag / tl * 100) / 100.0 << "/m\n"
-      << "*/\n"
-      << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
-      << "namespace atlas {\nnamespace neural {\n\n"
-      << "constexpr uint8_t kGainInputs = " << kIn << ";\n"
-      << "constexpr uint8_t kGainHidden = " << kHid << ";\n"
-      << "constexpr uint8_t kGainOutputs = " << kOut << ";  // % de kp, % de kd\n"
-      << "constexpr uint8_t kGainShift1 = " << int(atlas::neural::kGainShift1) << ";\n"
-      << "constexpr uint8_t kGainShift2 = " << int(atlas::neural::kGainShift2) << ";\n\n"
-      << "ATLAS_PROGMEM const int8_t kGainWeights1[kGainHidden * kGainInputs] = {" << list(n.w1, kHid * kIn, kIn) << "};\n"
-      << "ATLAS_PROGMEM const int32_t kGainBias1[kGainHidden] = {" << list(n.b1, kHid, 4) << "};\n"
-      << "ATLAS_PROGMEM const int16_t kGainWeights2[kGainOutputs * kGainHidden] = {" << list(n.w2, kOut * kHid, kHid) << "};\n"
-      << "ATLAS_PROGMEM const int32_t kGainBias2[kGainOutputs] = {" << list(n.b2, kOut, kOut) << "};\n\n"
-      << "const TinyMlpWeights kGainNet = {kGainInputs, kGainHidden, kGainOutputs,\n"
-      << "                                 kGainWeights1, kGainBias1, kGainShift1,\n"
-      << "                                 kGainWeights2, kGainBias2, kGainShift2};\n\n"
-      << "}  // namespace neural\n}  // namespace atlas\n";
-}
-
-// Parámetros del optimizador que reproducen los pesos de NeuralGainWeights.h
-// (inverso de decode): el entrenamiento continúa desde la red actual.
-std::vector<double> currentTheta() {
-  std::vector<double> theta;
-  for (int i = 0; i < kHid * kIn; i++) theta.push_back(atlas::neural::kGainWeights1[i] / 24.0);
-  for (int i = 0; i < kHid; i++) theta.push_back(atlas::neural::kGainBias1[i] / 3000.0);
-  for (int i = 0; i < kOut * kHid; i++) theta.push_back(atlas::neural::kGainWeights2[i] / 24.0);
-  for (int i = 0; i < kOut; i++)
-    theta.push_back((atlas::neural::kGainBias2[i] - (100L << atlas::neural::kGainShift2)) / 2560.0);
-  return theta;
-}
-
-Score scoreOf(const std::vector<TrackEntry>& tracks, const std::vector<Case>& cases, const std::vector<double>& theta) {
-  const Net net = decode(theta);
-  const atlas::TinyMlpWeights view = net.view();
-  return evaluateAll(tracks, cases, {&view})[0];
-}
-
-// Red que da 100 % / 100 % (neutra) con la capa oculta activa.
-std::vector<double> neutralTheta(std::mt19937& random) {
-  std::normal_distribution<double> gauss(0.0, 1.0);
-  std::vector<double> theta(kParams, 0.0);
-  for (int i = 0; i < kHid * kIn; i++) theta[i] = gauss(random) * 0.7;
-  for (int i = 0; i < kHid; i++) theta[kHid * kIn + i] = 0.2;
-  return theta;
-}
-
-int train(long budget, bool fromNeutral) {
-  const std::vector<TrackEntry> tracks = buildTrackLibrary();
-  std::mt19937 random(23);
-  std::normal_distribution<double> gauss(0.0, 1.0);
-
-  std::vector<double> theta = fromNeutral ? neutralTheta(random) : currentTheta();
-  const int pairs = 8;
-  const double rate = 0.04;
-  std::vector<double> m(kParams, 0), v(kParams, 0);
-
-  // Validación fija (todas las pistas, semillas que no se usan al entrenar).
-  const std::vector<Case> checkCases = makeCases(tracks, 70000, 1, true);
-  std::vector<double> best = theta;
-  double bestCost = scoreOf(tracks, checkCases, theta).cost;
-  std::printf("Inicio (%s): costo de validación %.1f en %zu competencias\n", fromNeutral ? "red neutra" : "red actual",
-              bestCost, checkCases.size());
-  long used = 0;
-  int checksWithoutGain = 0;
-  for (int g = 0; used < budget; g++) {
-    const double progress = static_cast<double>(used) / budget;
-    const double sigma = 0.30 * (1.0 - 0.6 * progress);  // exploración que se afina
-    const std::vector<Case> cases = makeCases(tracks, 20000 + g * 7919, 1, false);
-    std::vector<std::vector<double>> noise(pairs, std::vector<double>(kParams));
-    std::vector<Net> nets;
-    for (int p = 0; p < pairs; p++) {
-      for (double& n : noise[p]) n = gauss(random);
-      for (int sign : {1, -1}) {
-        std::vector<double> candidate = theta;
-        for (int k = 0; k < kParams; k++) candidate[k] += sign * sigma * noise[p][k];
-        nets.push_back(decode(candidate));
-      }
-    }
-    std::vector<atlas::TinyMlpWeights> views;
-    for (const Net& n : nets) views.push_back(n.view());
-    std::vector<const atlas::TinyMlpWeights*> candidates;
-    for (const atlas::TinyMlpWeights& w : views) candidates.push_back(&w);
-    const std::vector<Score> scores = evaluateAll(tracks, cases, candidates);
-    used += static_cast<long>(candidates.size() * cases.size());
-
-    std::vector<int> order(2 * pairs);
-    for (int i = 0; i < 2 * pairs; i++) order[i] = i;
-    std::sort(order.begin(), order.end(), [&](int a, int b) { return scores[a].cost < scores[b].cost; });
-    std::vector<double> utility(2 * pairs);
-    for (int r = 0; r < 2 * pairs; r++) utility[order[r]] = 0.5 - static_cast<double>(r) / (2 * pairs - 1);
-    std::vector<double> grad(kParams, 0.0);
-    for (int p = 0; p < pairs; p++) {
-      const double diff = utility[2 * p] - utility[2 * p + 1];
-      for (int k = 0; k < kParams; k++) grad[k] += diff * noise[p][k] / (pairs * sigma);
-    }
-    for (int k = 0; k < kParams; k++) {
-      m[k] = 0.9 * m[k] + 0.1 * grad[k];
-      v[k] = 0.999 * v[k] + 0.001 * grad[k] * grad[k];
-      const double mHat = m[k] / (1 - std::pow(0.9, g + 1)), vHat = v[k] / (1 - std::pow(0.999, g + 1));
-      theta[k] += rate * mHat / (std::sqrt(vHat) + 1e-8);
-    }
-    std::printf("gen %3d  competencias %6ld/%ld  mejor candidato %.1f  peor %.1f  salidas %d\n", g, used, budget,
-                scores[order[0]].cost, scores[order[2 * pairs - 1]].cost, scores[order[0]].failures);
-
-    if (g % 10 == 9) {  // validación: ¿sigue mejorando?
-      const Score check = scoreOf(tracks, checkCases, theta);
-      const bool better = check.cost < bestCost - 0.5;
-      std::printf("  validación: costo %.1f (salidas %d)  mejor hasta ahora %.1f%s\n", check.cost, check.failures,
-                  bestCost, better ? "  <- nuevo mejor" : "");
-      if (better) {
-        bestCost = check.cost;
-        best = theta;
-        checksWithoutGain = 0;
-      } else if (++checksWithoutGain >= 4) {
-        std::printf("  40 generaciones sin mejorar en validación: se detiene.\n");
-        break;
-      }
-    }
-    std::fflush(stdout);
-  }
-  std::printf("Competencias de entrenamiento usadas: %ld\n", used);
-
-  // Validación final con otras semillas nuevas en todas las pistas.
-  const Net bestNet = decode(best);
-  const atlas::TinyMlpWeights bestView = bestNet.view();
-  const std::vector<Case> validation = makeCases(tracks, 90000, 3, true);
-  const std::vector<Score> result = evaluateAll(tracks, validation, {nullptr, &bestView});
-  std::printf("\nValidación: %zu competencias de 3 intentos (todas las pistas, 3 modelos, semillas nuevas)\n",
-              validation.size());
-  printScore("sin red de control", result[0]);
-  printScore("con red de control", result[1]);
-
-  const std::string path = std::string(ATLAS_SOURCE_DIR) + "/lib/AtlasCore/src/NeuralGainWeights.h";
-  writeGainHeader(path, bestNet, result[0], result[1], static_cast<int>(validation.size()));
-  std::printf("Pesos escritos en %s\n", path.c_str());
-  return 0;
 }
 
 //  ---------------------------------------------------------------------------
@@ -856,7 +582,7 @@ struct GainResult {
 };
 
 // Una competencia (3 intentos) con los ajustes del firmware y estas ganancias.
-// Red de posición activa; red de control apagada (se reentrena después).
+// Red de posición activa; red de control apagada (se entrena aparte).
 GainResult runGains(const std::vector<TrackEntry>& tracks, const Case& c, const Gains& g) {
   atlas::RobotConfig safe = atlas::firmwareSafeConfig(true), fast = atlas::firmwareFastConfig(true);
   safe.control.neuralGains = fast.control.neuralGains = false;
@@ -1039,11 +765,7 @@ int sweepGains() {
 int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
   if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
-  if (mode == "control") {
-    const bool neutral = argc > 3 && std::string(argv[3]) == "neutra";
-    return gains::train(argc > 2 ? std::atol(argv[2]) : 25000, neutral);
-  }
   if (mode == "ganancias") return gains::sweepGains();
-  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | control [competencias] | ganancias\n");
+  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | ganancias\n");
   return 1;
 }

@@ -1,6 +1,6 @@
 #include "LineFollower.h"
 
-#include "NeuralGainWeights.h"
+#include "NeuralHierarchyWeights.h"
 #include "TinyMlp.h"
 
 namespace atlas {
@@ -104,6 +104,7 @@ void LineFollower::update(uint32_t nowMs) {
     if (recovering_) {
       pd_.reset();  // sin tirón del derivativo al recuperar la línea
       lastError_ = 0;
+      reacquiredMs_ = nowMs;
     }
     if (bridging_) {
       lastBridgeMs_ = nowMs;
@@ -256,7 +257,7 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   if (config_->control.neuralGains) {
     uint8_t kpPercent;
     uint8_t kdPercent;
-    neuralGains(error, velocity, &kpPercent, &kdPercent);
+    neuralGains(error, velocity, nowMs, &kpPercent, &kdPercent);
     const uint16_t guard = guard_.gainPercent();
     correction = pd_.update(error, static_cast<uint8_t>(kpPercent * guard / 100),
                             static_cast<uint8_t>(kdPercent * guard / 100));
@@ -273,40 +274,32 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
 }
 
 namespace {
-constexpr int16_t kNeuralGainMinPercent = 70;
-constexpr int16_t kNeuralGainMaxPercent = 130;
-
 int8_t toInput(int16_t value) { return static_cast<int8_t>(value > 127 ? 127 : value); }
 }  // namespace
 
 // Entradas (escala 0 ... 127): |error|, |cambio del error|, si se aleja (+) o
-// se acerca (-) a la línea, velocidad, curvatura del mapa más adelante y
-// auto-amortiguación. Salidas: % de kp y % de kd, acotados.
-void LineFollower::neuralGains(int32_t error, int16_t velocity, uint8_t* kpPercent, uint8_t* kdPercent) const {
+// se acerca (-) a la línea, velocidad, curvatura del mapa más adelante,
+// auto-amortiguación, cruce u otra rama a la vista, y ms desde que se
+// recuperó la línea. Salidas: % de kp y % de kd de la red jerárquica.
+void LineFollower::neuralGains(int32_t error, int16_t velocity, uint32_t nowMs, uint8_t* kpPercent,
+                               uint8_t* kdPercent) {
   const ControlConfig& control = config_->control;
   const int16_t e = static_cast<int16_t>(error);  // |error| <= 7500
   const int16_t delta = e - static_cast<int16_t>(lastError_);
   const int16_t magnitude = e < 0 ? -e : e;
   const int16_t change = delta < 0 ? -delta : delta;
-  int8_t input[neural::kGainInputs];
+  const uint32_t sinceReacquired = nowMs - reacquiredMs_;
+  int8_t* input = neuralInputs_;
   input[0] = toInput(magnitude >> 6);
   input[1] = toInput(change >> 2);
   input[2] = delta == 0 || e == 0 ? 0 : ((e > 0) == (delta > 0) ? 127 : -127);
   input[3] = toInput(velocity >> 1);
   input[4] = toInput(curvatureAhead() >> 1);
   input[5] = toInput(guard_.gainPercent());
-
-  int32_t output[neural::kGainOutputs];
-  TinyMlp(control.gainNetwork != nullptr ? *control.gainNetwork : neural::kGainNet).evaluate(input, output);
-  uint8_t percent[neural::kGainOutputs];
-  for (uint8_t k = 0; k < neural::kGainOutputs; k++) {
-    const int32_t value = output[k];
-    percent[k] = static_cast<uint8_t>(value < kNeuralGainMinPercent   ? kNeuralGainMinPercent
-                                      : value > kNeuralGainMaxPercent ? kNeuralGainMaxPercent
-                                                                      : value);
-  }
-  *kpPercent = percent[0];
-  *kdPercent = percent[1];
+  input[6] = reading_.ambiguous || reading_.otherLineLeft || reading_.otherLineRight ? 127 : 0;
+  input[7] = toInput(static_cast<int16_t>(sinceReacquired > 254 ? 127 : sinceReacquired >> 1));
+  evaluateHierarchy(control.hierarchy != nullptr ? *control.hierarchy : neural::kHierarchy, input, kpPercent,
+                    kdPercent, situationWeights_);
 }
 
 // Curva más cerrada de los próximos 5 tramos del mapa (0 si no hay mapa).

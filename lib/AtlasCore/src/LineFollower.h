@@ -66,6 +66,9 @@ class LineFollower {
   const LineReading& lastReading() const { return reading_; }
   uint8_t gainPercent() const { return guard_.gainPercent(); }
   uint8_t speedPercent() const { return governor_.speedPercent(); }
+  // Última entrada y pesos de situación de la red jerárquica (registro y entrenamiento).
+  const int8_t* neuralInputs() const { return neuralInputs_; }
+  const uint8_t* situationWeights() const { return situationWeights_; }
 
  private:
   int16_t currentVelocity(uint32_t nowMs) const;
@@ -86,7 +89,7 @@ class LineFollower {
   int16_t compensateDeadband(int16_t pwm) const;
   int16_t guidedVelocity(int16_t velocity) const;
   // Red de control: porcentaje de kp y kd para esta lectura.
-  void neuralGains(int32_t error, int16_t velocity, uint8_t* kpPercent, uint8_t* kdPercent) const;
+  void neuralGains(int32_t error, int16_t velocity, uint32_t nowMs, uint8_t* kpPercent, uint8_t* kdPercent);
   uint8_t curvatureAhead() const;
   void trackDistance();
   void onGapEntered();
@@ -134,6 +137,9 @@ class LineFollower {
   Side lastSide_ = Side::Left;
 
   int32_t lastError_ = 0;
+  uint32_t reacquiredMs_ = 0;
+  int8_t neuralInputs_[8] = {};
+  uint8_t situationWeights_[4] = {};
   LineReading reading_;
   MotorCommand command_;
 };

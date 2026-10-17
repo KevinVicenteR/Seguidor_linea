@@ -37,7 +37,8 @@ class TinyMlp {
   explicit TinyMlp(const TinyMlpWeights& weights) : weights_(weights) {}
 
   // input: weights.inputs valores; output: weights.outputs valores.
-  void evaluate(const int8_t* input, int32_t* output) const {
+  // Una sola copia en la flash aunque se llame desde varios lugares.
+  __attribute__((noinline)) void evaluate(const int8_t* input, int32_t* output) const {
     int16_t hidden[kMaxHidden];
     const TinyMlpWeights& w = weights_;
 

@@ -23,11 +23,11 @@ add_library(atlas_core STATIC ${ATLAS_CORE_SOURCES})
 target_include_directories(atlas_core PUBLIC ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src)
 target_compile_options(atlas_core PRIVATE -Wall -Wextra -Wpedantic)
 
-# El toolchain AVR de Arduino compila con gnu++11: se verifica que el núcleo
-# no use nada más moderno.
-add_library(atlas_core_cxx11_check OBJECT ${ATLAS_CORE_SOURCES})
-set_target_properties(atlas_core_cxx11_check PROPERTIES CXX_STANDARD 11)
-target_compile_options(atlas_core_cxx11_check PRIVATE -Wall -Wextra -Wpedantic)
+# El firmware AVR se compila con gnu++14 (platformio.ini): se verifica que el
+# núcleo no use nada más moderno.
+add_library(atlas_core_cxx14_check OBJECT ${ATLAS_CORE_SOURCES})
+set_target_properties(atlas_core_cxx14_check PROPERTIES CXX_STANDARD 14)
+target_compile_options(atlas_core_cxx14_check PRIVATE -Wall -Wextra -Wpedantic)
 
 add_subdirectory(simulation)
 

@@ -32,8 +32,9 @@ constexpr MotorPolarity kLeftMotorPolarity = MotorPolarity::Normal;
 constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
 // Ajustes compartidos con el modo --firmware del simulador.
-const RobotConfig kSafeConfig = firmwareSafeConfig();
-const RobotConfig kFastConfig = firmwareFastConfig();
+// constexpr: calculadas al compilar (sin código de inicialización al arrancar).
+constexpr RobotConfig kSafeConfig = firmwareSafeConfig();
+constexpr RobotConfig kFastConfig = firmwareFastConfig();
 
 
 AvrClock robotClock;

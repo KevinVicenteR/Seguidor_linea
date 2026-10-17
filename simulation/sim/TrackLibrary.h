@@ -16,6 +16,10 @@ struct TrackEntry {
 };
 
 std::vector<TrackEntry> buildTrackLibrary();
+// Pistas de dificultad extrema (exploratorias, para entrenar y medir límites):
+// horquillas de 11 cm, escalera de 90°, picos de 30°, esquinas con punteado,
+// cruce a 30° y eses rápidas.
+std::vector<TrackEntry> buildExtremeTrackLibrary();
 
 // Centro del hueco inferior de la pista de competencia (para salir desde ahí).
 Vec2 competitionGapCenter();
