@@ -1,0 +1,139 @@
+Pistas: 17 (6 extremas). Kp/Kd base: seguro 0.0075/0.860, rápido 0.0068/0.990
+Etapa 1: 1056366 muestras de entrenamiento, 305375 de validación (pistas separadas)
+  recta         684093 muestras  peso 0.39
+  curva         216592 muestras  peso 1.22
+  cruce/hueco    24592 muestras  peso 10.74
+  recuperación 131089 muestras  peso 2.01
+  época   0  pérdida 0.2311 / 0.2324  exactitud 82.6% / 84.9%  paso 0.0100  nuevo mejor en validación (se guarda)
+  época   4  pérdida 0.2306 / 0.2315  exactitud 82.7% / 85.0%  paso 0.0100  nuevo mejor en validación (se guarda)
+  época   8  pérdida 0.2300 / 0.2311  exactitud 82.4% / 84.6%  paso 0.0100  nuevo mejor en validación (se guarda)
+  época  10  pérdida 0.2299 / 0.2317  exactitud 82.5% / 84.9%  paso 0.0100  -
+  época  20  pérdida 0.2306 / 0.2341  exactitud 81.9% / 84.1%  paso 0.0100  -
+  época  23  pérdida 0.2299 / 0.2311  exactitud 82.5% / 84.8%  paso 0.0050  meseta: paso de aprendizaje a la mitad
+  época  28  pérdida 0.2297 / 0.2302  exactitud 82.8% / 85.3%  paso 0.0050  nuevo mejor en validación (se guarda)
+  época  30  pérdida 0.2298 / 0.2318  exactitud 82.3% / 84.5%  paso 0.0050  -
+  época  40  pérdida 0.2302 / 0.2323  exactitud 82.6% / 84.9%  paso 0.0050  -
+  época  43  pérdida 0.2299 / 0.2314  exactitud 82.5% / 84.9%  paso 0.0025  meseta: paso de aprendizaje a la mitad
+  época  50  pérdida 0.2297 / 0.2320  exactitud 82.4% / 84.7%  paso 0.0025  -
+  época  58  pérdida 0.2298 / 0.2327  exactitud 82.2% / 84.4%  paso 0.0013  meseta: paso de aprendizaje a la mitad
+  época  60  pérdida 0.2295 / 0.2319  exactitud 82.4% / 84.7%  paso 0.0013  -
+  época  68  pérdida 0.2298 / 0.2324  exactitud 82.2% / 84.5%  paso 0.0013  parada temprana: 40 épocas sin mejorar
+  mejor época 28
+  matriz de confusión (validación, red en enteros; filas = real):
+    recta         185075  18526      0   7487
+    curva          17844  28149      0    255
+    cruce/hueco      414     35   6312      0
+    recuperación      0      0    243  41035
+  * Etapa 1 terminada: mejor época 28, pérdida de validación 0.230222
+
+Etapa 2: referencia en validación: costo 6821.8, salidas 10  zigzag±10mm 0.983/m  dirección 45.4  mapa 12.03s
+gen   0 fase 0  mejor 823.8  mediana 835.0  σ 0.292  competencias 291  
+gen   1 fase 0  mejor 833.7  mediana 1127.0  σ 0.285  competencias 531  
+gen   2 fase 0  mejor 816.0  mediana 828.4  σ 0.280  competencias 771  
+gen   3 fase 0  mejor 767.5  mediana 790.9  σ 0.275  competencias 1011  
+gen   4 fase 0  mejor 728.2  mediana 735.5  σ 0.271  competencias 1251  
+gen   5 fase 0  mejor 857.9  mediana 873.6  σ 0.267  competencias 1491  
+gen   6 fase 0  mejor 737.3  mediana 744.6  σ 0.264  competencias 1731  
+gen   7 fase 0  mejor 835.3  mediana 1122.1  σ 0.262  competencias 1971  
+gen   8 fase 0  mejor 806.3  mediana 1648.9  σ 0.260  competencias 2211  
+  * gen 9: validación: rechazado, mapa más lento en Pista de práctica/nominal (+3.5 %)
+gen   9 fase 0  mejor 753.9  mediana 762.9  σ 0.258  competencias 2502  validación: rechazado, mapa más lento en Pista de práctica/nominal (+3.5 %)
+gen  10 fase 0  mejor 851.4  mediana 1147.3  σ 0.257  competencias 2742  
+gen  11 fase 0  mejor 748.4  mediana 1038.4  σ 0.256  competencias 2982  
+gen  12 fase 0  mejor 764.6  mediana 767.3  σ 0.255  competencias 3222  
+gen  13 fase 0  mejor 625.2  mediana 628.3  σ 0.254  competencias 3462  
+gen  14 fase 0  mejor 811.2  mediana 1098.8  σ 0.254  competencias 3702  
+gen  15 fase 0  mejor 907.2  mediana 1477.7  σ 0.254  competencias 3942  
+gen  16 fase 0  mejor 638.4  mediana 646.1  σ 0.254  competencias 4182  
+gen  17 fase 0  mejor 706.3  mediana 711.9  σ 0.254  competencias 4422  
+gen  18 fase 0  mejor 817.3  mediana 1382.0  σ 0.253  competencias 4662  
+  * gen 19: validación: rechazado, mapa más lento en Pista de práctica/nominal (+7.6 %)
+gen  19 fase 0  mejor 614.4  mediana 621.0  σ 0.253  competencias 4953  validación: rechazado, mapa más lento en Pista de práctica/nominal (+7.6 %)
+  * gen 20: currículo: entran las pistas difíciles (doble peso)
+gen  20 fase 1  mejor 841.8  mediana 1129.8  σ 0.253  competencias 5193  currículo: entran las pistas difíciles (doble peso)
+gen  21 fase 1  mejor 1357.8  mediana 1922.3  σ 0.253  competencias 5433  
+gen  22 fase 1  mejor 732.3  mediana 1014.9  σ 0.253  competencias 5673  
+gen  23 fase 1  mejor 735.5  mediana 1025.4  σ 0.253  competencias 5913  
+gen  24 fase 1  mejor 726.0  mediana 729.8  σ 0.253  competencias 6153  
+gen  25 fase 1  mejor 755.0  mediana 1320.4  σ 0.252  competencias 6393  
+gen  26 fase 1  mejor 703.0  mediana 707.2  σ 0.253  competencias 6633  
+gen  27 fase 1  mejor 706.5  mediana 989.9  σ 0.253  competencias 6873  
+gen  28 fase 1  mejor 1338.8  mediana 1342.9  σ 0.254  competencias 7113  
+  * gen 29: validación: rechazado, mapa más lento en Óvalo de velocidad/nominal (+3.7 %); estancado: reinicio de σ a 0.2 desde el mejor
+gen  29 fase 1  mejor 818.5  mediana 832.3  σ 0.200  competencias 7404  validación: rechazado, mapa más lento en Óvalo de velocidad/nominal (+3.7 %); estancado: reinicio de σ a 0.2 desde el mejor
+gen  30 fase 1  mejor 732.2  mediana 738.1  σ 0.195  competencias 7644  
+gen  31 fase 1  mejor 685.0  mediana 690.1  σ 0.190  competencias 7884  
+gen  32 fase 1  mejor 1080.9  mediana 1368.5  σ 0.187  competencias 8124  
+gen  33 fase 1  mejor 752.7  mediana 754.8  σ 0.183  competencias 8364  
+gen  34 fase 1  mejor 688.2  mediana 689.9  σ 0.181  competencias 8604  
+gen  35 fase 1  mejor 732.1  mediana 1017.3  σ 0.178  competencias 8844  
+gen  36 fase 1  mejor 748.9  mediana 1318.8  σ 0.176  competencias 9084  
+gen  37 fase 1  mejor 758.2  mediana 763.1  σ 0.174  competencias 9324  
+gen  38 fase 1  mejor 698.4  mediana 701.9  σ 0.172  competencias 9564  
+  * gen 39: validación: rechazado, mapa más lento en Pista de práctica/nominal (+8.1 %)
+gen  39 fase 1  mejor 724.4  mediana 733.0  σ 0.170  competencias 9855  validación: rechazado, mapa más lento en Pista de práctica/nominal (+8.1 %)
+  * gen 40: currículo: entran las pistas extremas
+gen  40 fase 2  mejor 1629.8  mediana 1632.5  σ 0.169  competencias 10095  currículo: entran las pistas extremas
+gen  41 fase 2  mejor 1101.9  mediana 1390.9  σ 0.168  competencias 10335  
+gen  42 fase 2  mejor 1105.8  mediana 1506.7  σ 0.166  competencias 10575  
+gen  43 fase 2  mejor 759.1  mediana 1042.4  σ 0.165  competencias 10815  
+gen  44 fase 2  mejor 836.4  mediana 1253.6  σ 0.165  competencias 11055  
+gen  45 fase 2  mejor 2597.4  mediana 2884.0  σ 0.164  competencias 11295  
+gen  46 fase 2  mejor 888.3  mediana 895.3  σ 0.163  competencias 11535  
+gen  47 fase 2  mejor 1575.3  mediana 1864.2  σ 0.163  competencias 11775  
+gen  48 fase 2  mejor 888.9  mediana 1691.9  σ 0.162  competencias 12015  
+  * gen 49: validación: rechazado, mapa más lento en Pista de práctica/nominal (+5.6 %)
+gen  49 fase 2  mejor 1670.4  mediana 1957.1  σ 0.162  competencias 12306  validación: rechazado, mapa más lento en Pista de práctica/nominal (+5.6 %)
+gen  50 fase 2  mejor 2067.8  mediana 2081.4  σ 0.161  competencias 12546  
+gen  51 fase 2  mejor 1471.5  mediana 1473.5  σ 0.161  competencias 12786  
+gen  52 fase 2  mejor 1563.6  mediana 1854.2  σ 0.161  competencias 13026  
+gen  53 fase 2  mejor 811.1  mediana 1230.9  σ 0.160  competencias 13266  
+gen  54 fase 2  mejor 809.8  mediana 817.7  σ 0.160  competencias 13506  
+gen  55 fase 2  mejor 3530.5  mediana 3945.7  σ 0.160  competencias 13746  
+gen  56 fase 2  mejor 4923.7  mediana 5496.6  σ 0.159  competencias 13986  
+gen  57 fase 2  mejor 949.8  mediana 1243.5  σ 0.159  competencias 14226  
+gen  58 fase 2  mejor 2136.0  mediana 2143.8  σ 0.159  competencias 14466  
+  * gen 59: validación: rechazado, mapa más lento en Pista de práctica/nominal (+7.9 %); estancado: reinicio de σ a 0.2 desde el mejor
+gen  59 fase 2  mejor 1612.3  mediana 1897.5  σ 0.200  competencias 14757  validación: rechazado, mapa más lento en Pista de práctica/nominal (+7.9 %); estancado: reinicio de σ a 0.2 desde el mejor
+gen  60 fase 2  mejor 1876.0  mediana 2152.6  σ 0.195  competencias 14997  
+gen  61 fase 2  mejor 794.7  mediana 798.6  σ 0.190  competencias 15237  
+gen  62 fase 2  mejor 1996.0  mediana 2693.7  σ 0.186  competencias 15477  
+gen  63 fase 2  mejor 2171.1  mediana 2465.4  σ 0.183  competencias 15717  
+gen  64 fase 2  mejor 891.2  mediana 896.2  σ 0.180  competencias 15957  
+gen  65 fase 2  mejor 799.6  mediana 1077.7  σ 0.178  competencias 16197  
+gen  66 fase 2  mejor 830.1  mediana 1634.7  σ 0.176  competencias 16437  
+gen  67 fase 2  mejor 2743.8  mediana 3304.9  σ 0.174  competencias 16677  
+gen  68 fase 2  mejor 755.1  mediana 1324.0  σ 0.173  competencias 16917  
+  * gen 69: validación: rechazado, mapa más lento en Pista de práctica/nominal (+12.3 %)
+gen  69 fase 2  mejor 703.5  mediana 711.2  σ 0.172  competencias 17208  validación: rechazado, mapa más lento en Pista de práctica/nominal (+12.3 %)
+gen  70 fase 2  mejor 995.7  mediana 1287.0  σ 0.171  competencias 17448  
+gen  71 fase 2  mejor 1653.4  mediana 2637.3  σ 0.170  competencias 17688  
+gen  72 fase 2  mejor 1335.1  mediana 1903.1  σ 0.169  competencias 17928  
+gen  73 fase 2  mejor 736.7  mediana 1302.9  σ 0.168  competencias 18168  
+gen  74 fase 2  mejor 807.9  mediana 812.4  σ 0.167  competencias 18408  
+gen  75 fase 2  mejor 696.1  mediana 701.9  σ 0.167  competencias 18648  
+gen  76 fase 2  mejor 834.9  mediana 1118.0  σ 0.167  competencias 18888  
+gen  77 fase 2  mejor 1574.4  mediana 1856.6  σ 0.166  competencias 19128  
+gen  78 fase 2  mejor 749.1  mediana 1038.6  σ 0.166  competencias 19368  
+  * gen 79: validación: rechazado, mapa más lento en Pista de práctica/nominal (+8.7 %)
+gen  79 fase 2  mejor 1611.3  mediana 1616.3  σ 0.165  competencias 19659  validación: rechazado, mapa más lento en Pista de práctica/nominal (+8.7 %)
+gen  80 fase 2  mejor 1621.1  mediana 1906.4  σ 0.165  competencias 19899  
+gen  81 fase 2  mejor 762.3  mediana 769.7  σ 0.165  competencias 20139  
+gen  82 fase 2  mejor 1650.3  mediana 2083.2  σ 0.164  competencias 20379  
+gen  83 fase 2  mejor 2013.5  mediana 2434.9  σ 0.164  competencias 20619  
+gen  84 fase 2  mejor 2057.9  mediana 2352.0  σ 0.164  competencias 20859  
+gen  85 fase 2  mejor 2927.8  mediana 2930.0  σ 0.164  competencias 21099  
+gen  86 fase 2  mejor 1347.5  mediana 1367.7  σ 0.164  competencias 21339  
+gen  87 fase 2  mejor 746.5  mediana 1031.3  σ 0.164  competencias 21579  
+gen  88 fase 2  mejor 1930.2  mediana 2653.6  σ 0.164  competencias 21819  
+  * gen 89: validación: rechazado, mapa más lento en Pista de competencia/nominal (+3.5 %); estancado tras 2 reinicios: se detiene
+gen  89 fase 2  mejor 1545.5  mediana 1835.4  σ 0.164  competencias 22110  validación: rechazado, mapa más lento en Pista de competencia/nominal (+3.5 %); estancado tras 2 reinicios: se detiene
+  * Ninguna red superó a la referencia en validación: se conserva la red neutra.
+
+Prueba final (153 competencias por configuración, semillas nuevas):
+  referencia: salidas 28  zigzag±10mm 1.050/m  dirección 46.3  mapa 12.19s
+  entrenada:  salidas 28  zigzag±10mm 1.050/m  dirección 46.3  mapa 12.19s
+  cumple restricciones por pista y modelo
+  * Prueba final: cumple restricciones por pista y modelo
+No se escriben pesos: la red no superó la prueba final.
+Registro: /private/tmp/claude-501/-Users-kevinalexandervicenterosaldo-Seguidor-linea/ac2bc2fb-ffb1-49c6-87a6-744275b009bd/scratchpad/jerarquica.json
