@@ -56,3 +56,7 @@ target_compile_definitions(atlas_train_nn PRIVATE ATLAS_SOURCE_DIR="${CMAKE_SOUR
 add_executable(atlas_train_hierarchy tools/atlas_train_hierarchy.cpp)
 target_link_libraries(atlas_train_hierarchy PRIVATE atlas_sim_lib Threads::Threads)
 target_compile_definitions(atlas_train_hierarchy PRIVATE ATLAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# Ajuste del modelo del robot a una vuelta real registrada por serial (atlas_log).
+add_executable(atlas_fit_robot tools/atlas_fit_robot.cpp)
+target_link_libraries(atlas_fit_robot PRIVATE atlas_sim_lib Threads::Threads)

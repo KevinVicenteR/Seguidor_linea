@@ -24,6 +24,9 @@
 #include "LineSensorArray.h"
 #include "FirmwareConfig.h"
 #include "TrackMap.h"
+#ifdef ATLAS_LOG
+#include "AvrRaceLogger.h"
+#endif
 
 using namespace atlas;
 
@@ -59,6 +62,10 @@ AppOptions makeAppOptions() {
 
 AtlasApp app(robotClock, panel, panel, sensors, drivetrain, follower, kSafeConfig, makeAppOptions());
 
+#ifdef ATLAS_LOG
+AvrRaceLogger raceLogger(4);  // una trama cada 4 ciclos de control (~3 ms)
+#endif
+
 void setup() {
   cli();
   panel.begin();
@@ -66,7 +73,15 @@ void setup() {
   drivetrain.begin();
   sei();
 
+#ifdef ATLAS_LOG
+  raceLogger.begin();
+#endif
   app.begin();
 }
 
-void loop() { app.tick(); }
+void loop() {
+  app.tick();
+#ifdef ATLAS_LOG
+  raceLogger.update(follower, robotClock.millis());
+#endif
+}

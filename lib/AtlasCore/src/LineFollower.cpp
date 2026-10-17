@@ -295,11 +295,11 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   return command;
 }
 
+#ifndef ATLAS_NO_HIERARCHY
 namespace {
 int8_t toInput(int16_t value) { return static_cast<int8_t>(value > 127 ? 127 : value); }
 }  // namespace
 
-#ifndef ATLAS_NO_HIERARCHY
 // Entradas (escala 0 ... 127): |error|, |cambio del error|, si se aleja (+) o
 // se acerca (-) a la línea, velocidad, curvatura del mapa más adelante,
 // auto-amortiguación, cruce u otra rama a la vista, y ms desde que se
