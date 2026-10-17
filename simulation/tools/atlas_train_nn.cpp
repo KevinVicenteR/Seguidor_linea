@@ -17,8 +17,16 @@
     validación con semillas separadas. Restricciones: 0 salidas y tiempo de
     las vueltas con mapa <= 103 % del actual; gana el menor zigzag.
 
+  derivada: red que estima el cambio del error por ciclo (reemplaza al D
+    filtrado). Etiqueta: cambio de la posición verdadera de la línea entre
+    ciclos consecutivos, opcionalmente adelantado. Valida en pistas separadas
+    y compara con el D filtrado clásico. Escribe NeuralDerivativeWeights.h
+    solo con "escribir".
+
   Uso: atlas_train_nn posicion [lecturas]     (25000 por defecto)
        atlas_train_nn ganancias
+       atlas_train_nn derivada [ciclos] [adelanto] [escribir]
+       atlas_train_nn derivada-prueba [semillas por pista y modelo]
 */
 #include <algorithm>
 #include <atomic>
@@ -36,6 +44,7 @@
 
 #include "FirmwareConfig.h"
 #include "LineSensorArray.h"
+#include "NeuralDerivativeWeights.h"
 #include "NeuralPositionWeights.h"
 #include "Profiles.h"
 #include "ScenarioRunner.h"
@@ -512,6 +521,228 @@ int trainPosition(std::size_t samples) {
   return 0;
 }
 
+
+//  ---------------------------------------------------------------------------
+//  Red de la derivada: estima el cambio del error por ciclo de control a
+//  partir de las pendientes del historial (1, 2, 4, 8 y 16 ciclos), la
+//  velocidad y |error|. La etiqueta es el cambio de la posición verdadera de
+//  la línea entre ciclos consecutivos (adelantada `lead` ciclos).
+//  ---------------------------------------------------------------------------
+
+namespace derivative {
+
+static_assert(atlas::neural::kDerivativeInputs == kInputs, "misma forma que la red de posición");
+static_assert(atlas::neural::kDerivativeHidden == kHidden, "misma forma que la red de posición");
+
+// Cruce único de la línea con la barra, con resolución fina: busca el mínimo
+// de la distancia en pasos de 0.05 sensores y ubica el vértice de la "V".
+bool trueCrossing(const Track& track, const RobotModel& robot, double* out) {
+  const Vec2 left = robot.sensorPosition(0, atlas::kSensorCount);
+  const Vec2 right = robot.sensorPosition(atlas::kSensorCount - 1, atlas::kSensorCount);
+  const Vec2 axis = (right - left) * (1.0 / (atlas::kSensorCount - 1));
+  const double step = 0.05;
+  int found = 0;
+  double a = 1e9, b = 1e9;
+  for (double index = -2.0; index <= atlas::kSensorCount + 1.0; index += step) {
+    const double c = track.distanceToLine(left + axis * index);
+    if (b < a && b <= c && b < 0.0012) {
+      if (++found > 1) return false;
+      const double x = index - step;
+      const double slope = std::max(a - b, c - b);
+      *out = (x + (slope > 1e-12 ? step * (a - c) / (2.0 * slope) : 0.0)) * 1000.0;
+    }
+    a = b;
+    b = c;
+  }
+  return found == 1;
+}
+
+struct Record {
+  uint32_t cycle;
+  int8_t input[kInputs];
+  float classic;
+  double truth;
+  bool usable;  // la entrada vale como muestra (historial lleno, lectura limpia)
+};
+
+std::vector<Sample> collect(const std::vector<TrackEntry>& tracks, const DataRun& run, int lead,
+                            const atlas::RobotConfig& firmware) {
+  ScenarioRunner runner(run.robot, run.sensors, firmware);
+  std::vector<Sample> samples;
+  std::vector<Record> recent;  // ciclos consecutivos con verdad conocida
+  uint32_t lastCycle = 0;
+  uint32_t cleanSince = 0;  // ciclos seguidos con línea limpia
+  runner.setObserver([&](double, const atlas::LineSensorArray&, const atlas::LineFollower& follower,
+                         const RobotModel& robot) {
+    const uint32_t cycle = follower.controlCycles();
+    if (!follower.isRunning() || cycle == lastCycle) return;
+    lastCycle = cycle;
+    const atlas::LineReading& reading = follower.lastReading();
+    Record r;
+    r.cycle = cycle;
+    if (!reading.onLine || reading.ambiguous || !trueCrossing(tracks[run.track].track, robot, &r.truth)) {
+      recent.clear();
+      cleanSince = 0;
+      return;
+    }
+    cleanSince++;
+    std::memcpy(r.input, follower.derivativeInputs(), kInputs);
+    r.classic = static_cast<float>(follower.classicDerivative());
+    r.usable = cleanSince >= 20;
+    if (!recent.empty() && recent.back().cycle + 1 != cycle) recent.clear();
+    recent.push_back(r);
+    if (recent.size() > static_cast<std::size_t>(lead + 2)) recent.erase(recent.begin());
+    if (recent.size() < static_cast<std::size_t>(lead + 2)) return;
+    const Record& sample = recent[0];
+    if (!sample.usable || (sample.cycle % 3) != 0) return;
+    Sample s;
+    std::memcpy(s.input, sample.input, kInputs);
+    // Cambio verdadero en el ciclo de la muestra + lead (en miles de unidades).
+    s.target = static_cast<float>((recent[lead + 1].truth - recent[lead].truth) / 1000.0);
+    s.weighted = sample.classic / 1000.0f;
+    s.validation = run.validation;
+    samples.push_back(s);
+  });
+
+  ScenarioSpec spec;
+  spec.trackIndex = run.track;
+  spec.cruisePwm = static_cast<int16_t>(run.pwm);
+  spec.seed = run.seed;
+  spec.impellerPwm = 150;
+  spec.sensorNoiseSigma = run.sensors.noiseSigma;
+  spec.timeLimitS = 25.0;
+  runner.run(tracks[run.track], spec);
+  return samples;
+}
+
+std::vector<Sample> buildDataset(const std::vector<TrackEntry>& tracks, int lead) {
+  RobotParams nominal, moderate, real;
+  moderate.motorTimeConstant = 0.055;
+  moderate.yawTimeConstant = 0.02;
+  moderate.commandLatencyS = 0.003;
+  real.motorTimeConstant = 0.07;
+  real.yawTimeConstant = 0.04;
+  real.commandLatencyS = 0.004;
+  const RobotParams models[] = {nominal, moderate, real};
+  const int speeds[] = {100, 140, 180};
+  atlas::RobotConfig firmware = atlas::safeProfile();
+
+  std::mt19937 random(4049);
+  std::uniform_real_distribution<double> spot(0.0028, 0.0060), gain(0.04, 0.20), contrast(0.75, 1.0),
+      noise(2.0, 10.0), ambient(0.0, 15.0);
+  std::vector<DataRun> runs;
+  int index = 0;
+  for (std::size_t t = 0; t < tracks.size(); t++) {
+    for (const RobotParams& model : models) {
+      for (int pwm : speeds) {
+        DataRun run;
+        run.track = t;
+        run.robot = model;
+        run.sensors.spotRadius = spot(random);
+        run.sensors.gainSpread = gain(random);
+        run.sensors.contrast = contrast(random);
+        run.sensors.noiseSigma = noise(random);
+        run.sensors.ambientOffset = ambient(random);
+        run.pwm = pwm;
+        run.seed = 9100 + static_cast<uint32_t>(index) * 17;
+        run.validation = t % 5 == 4;  // pistas enteras separadas para validar
+        runs.push_back(run);
+        index++;
+      }
+    }
+  }
+
+  std::vector<Sample> dataset;
+  std::mutex lock;
+  std::atomic<std::size_t> next{0};
+  auto worker = [&] {
+    for (std::size_t i = next++; i < runs.size(); i = next++) {
+      std::vector<Sample> part = collect(tracks, runs[i], lead, firmware);
+      std::lock_guard<std::mutex> guard(lock);
+      dataset.insert(dataset.end(), part.begin(), part.end());
+    }
+  };
+  std::vector<std::thread> pool;
+  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
+  for (std::thread& t : pool) t.join();
+  std::printf("Datos: %zu corridas, %zu muestras\n", runs.size(), dataset.size());
+  return dataset;
+}
+
+void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, std::size_t samples, int lead) {
+  char date[32];
+  const std::time_t now = std::time(nullptr);
+  std::strftime(date, sizeof(date), "%Y-%m-%d", std::localtime(&now));
+  std::ofstream out(path);
+  out << "/*\n"
+      << "  NeuralDerivativeWeights.h - GENERADO por simulation/tools/atlas_train_nn.cpp\n"
+      << "  (atlas_train_nn derivada). No editar a mano.\n\n"
+      << "  Red " << kInputs << " -> " << kHidden << " ReLU -> 1: cambio del error por ciclo de control\n"
+      << "  (adelanto " << lead << " ciclos), desde las pendientes del historial del error.\n"
+      << "  Entrenada el " << date << " con " << samples << " ciclos simulados (parada temprana).\n"
+      << "  Validación (RMS en unidades de error por ciclo):\n"
+      << "    D filtrado clásico " << e.weighted << ", red " << e.quantized << " (máx " << e.maxQuantized
+      << ")\n"
+      << "*/\n"
+      << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
+      << "namespace atlas {\nnamespace neural {\n\n"
+      << "constexpr bool kDerivativeTrained = true;\n"
+      << "constexpr uint8_t kDerivativeInputs = " << kInputs << ";\n"
+      << "constexpr uint8_t kDerivativeHidden = " << kHidden << ";\n\n"
+      << "ATLAS_PROGMEM const int8_t kDerivativeWeights1[kDerivativeHidden * kDerivativeInputs] = {"
+      << join(q.w1, kHidden * kInputs, kInputs) << "};\n"
+      << "ATLAS_PROGMEM const int32_t kDerivativeBias1[kDerivativeHidden] = {" << join(q.b1, kHidden, 5) << "};\n"
+      << "ATLAS_PROGMEM const int16_t kDerivativeWeights2[kDerivativeHidden] = {" << join(q.w2, kHidden, 10)
+      << "};\n"
+      << "ATLAS_PROGMEM const int32_t kDerivativeBias2[1] = {" << join(q.b2, 1, 1) << "};\n\n"
+      << "const TinyMlpWeights kDerivativeNet = {kDerivativeInputs, kDerivativeHidden, 1,\n"
+      << "                                       kDerivativeWeights1, kDerivativeBias1, " << int(q.shift1)
+      << ",\n"
+      << "                                       kDerivativeWeights2, kDerivativeBias2, " << int(q.shift2)
+      << "};\n\n"
+      << "}  // namespace neural\n}  // namespace atlas\n";
+}
+
+// Escribe los pesos solo con `escribir`; si no, solo informa.
+int train(std::size_t samples, int lead, bool write) {
+  const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  const std::vector<Sample> data = buildDataset(tracks, lead);
+  std::size_t validation = 0;
+  for (const Sample& s : data) validation += s.validation;
+  std::printf("Disponibles: entrenamiento %zu, validación %zu (pistas separadas)\n", data.size() - validation,
+              validation);
+  double spread = 0;
+  for (const Sample& s : data) spread += s.target * s.target;
+  std::printf("RMS de la derivada verdadera: %.1f unidades/ciclo\n", 1000.0 * std::sqrt(spread / data.size()));
+  // Escala: cuánto D clásico hay por unidad de derivada verdadera (1 = misma escala).
+  double cov = 0, varClassic = 0;
+  for (const Sample& s : data) {
+    cov += s.weighted * s.target;
+    varClassic += s.weighted * s.weighted;
+  }
+  std::printf("D clásico / verdadera: %.2f  (correlación %.2f)\n", cov / spread, cov / std::sqrt(spread * varClassic));
+
+  const FloatNet net = ::train(data, samples, 3000);
+  const QuantNet q = quantize(net, data);
+  const Errors tr = evaluate(net, q, data, false);
+  const Errors val = evaluate(net, q, data, true);
+  std::printf("\nRMS de la derivada (unidades de error por ciclo; 1000 = 1 sensor)\n");
+  std::printf("                 D clásico   red(double)   red(enteros)   máx(enteros)\n");
+  std::printf("  entrenamiento  %7.2f     %7.2f       %7.2f        %7.0f\n", tr.weighted, tr.network,
+              tr.quantized, tr.maxQuantized);
+  std::printf("  validación     %7.2f     %7.2f       %7.2f        %7.0f\n", val.weighted, val.network,
+              val.quantized, val.maxQuantized);
+  std::printf("  mejora en validación: %.0f %%\n", 100.0 * (1.0 - val.quantized / val.weighted));
+  std::printf("  shift1 %d  shift2 %d\n", q.shift1, q.shift2);
+  if (!write) return 0;
+  const std::string path = std::string(ATLAS_SOURCE_DIR) + "/lib/AtlasCore/src/NeuralDerivativeWeights.h";
+  writeHeader(path, q, val, std::min(samples, data.size() - validation), lead);
+  std::printf("Pesos escritos en %s\n", path.c_str());
+  return 0;
+}
+
+}  // namespace derivative
+
 //  ---------------------------------------------------------------------------
 //  Casos de evaluación comunes (pistas × modelos de robot × semillas)
 //  ---------------------------------------------------------------------------
@@ -758,6 +989,124 @@ int sweepGains() {
   return 0;
 }
 
+
+//  ---------------------------------------------------------------------------
+//  Prueba en lazo cerrado de la red de la derivada (pesos compilados)
+//  ---------------------------------------------------------------------------
+
+// Cruces de ±10 mm por metro: el zigzag que se vería en la pista.
+double visibleZigzag(const ScenarioResult& r) {
+  int side = 0, crossings = 0;
+  for (const TelemetrySample& t : r.telemetry) {
+    const int now = t.lateralOffset > 0.010 ? 1 : (t.lateralOffset < -0.010 ? -1 : 0);
+    if (now != 0 && side != 0 && now != side) crossings++;
+    if (now != 0) side = now;
+  }
+  return r.distance > 0 ? crossings / r.distance : 0;
+}
+
+struct Outcome {
+  int failures = 0, laps = 0, fastLaps = 0;
+  double zigzag = 0, steering = 0, fastTime = 0;
+  void add(const Outcome& o) {
+    failures += o.failures;
+    laps += o.laps;
+    fastLaps += o.fastLaps;
+    zigzag += o.zigzag;
+    steering += o.steering;
+    fastTime += o.fastTime;
+  }
+  double meanZigzag() const { return laps ? zigzag / laps : 0; }
+  double meanSteering() const { return laps ? steering / laps : 0; }
+  double meanFastTime() const { return fastLaps ? fastTime / fastLaps : 0; }
+};
+
+Outcome runCase(const std::vector<TrackEntry>& tracks, const Case& c, bool neuralDerivative) {
+  atlas::RobotConfig safe = atlas::firmwareSafeConfig(true), fast = atlas::firmwareFastConfig(true);
+  safe.control.neuralGains = fast.control.neuralGains = false;
+  safe.control.neuralDerivative = fast.control.neuralDerivative = neuralDerivative;
+  ScenarioSpec spec;
+  spec.trackIndex = c.track;
+  spec.cruisePwm = safe.speed.basePwm;
+  spec.seed = c.seed;
+  spec.learnTrack = true;
+  spec.attempts = 3;
+  spec.impellerPwm = safe.impeller.pwm;
+  spec.fastImpellerPwm = fast.impeller.pwm;
+  const std::vector<ScenarioResult> attempts =
+      ScenarioRunner(robotModel(c.model), SensorModel(), safe, fast).runAttempts(tracks[c.track], spec);
+  Outcome o;
+  for (std::size_t a = 0; a < attempts.size(); a++) {
+    const ScenarioResult& r = attempts[a];
+    if (!r.passed()) {
+      o.failures++;
+      continue;
+    }
+    o.laps++;
+    o.zigzag += visibleZigzag(r);
+    o.steering += r.steeringRmsPwm;
+    if (a > 0) {
+      o.fastTime += r.raceTime;
+      o.fastLaps++;
+    }
+  }
+  return o;
+}
+
+void printOutcome(const char* label, const Outcome& o, const Outcome& reference) {
+  std::printf("  %-24s salidas %3d  zigzag±10mm %.3f/m  dirección %5.1f  mapa %6.2fs (%+.1f %%)\n", label, o.failures,
+              o.meanZigzag(), o.meanSteering(), o.meanFastTime(),
+              reference.meanFastTime() > 0 ? 100.0 * (o.meanFastTime() / reference.meanFastTime() - 1.0) : 0.0);
+}
+
+int testDerivative(int seedsPerTrack) {
+  if (!atlas::neural::kDerivativeTrained) {
+    std::printf("NeuralDerivativeWeights.h no tiene pesos entrenados.\n");
+    return 1;
+  }
+  const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  const std::vector<Case> cases = makeCases(tracks, 777000, seedsPerTrack, true);
+  std::vector<Outcome> parts(2 * cases.size());
+  std::atomic<std::size_t> next{0};
+  auto worker = [&] {
+    for (std::size_t j = next++; j < parts.size(); j = next++) parts[j] = runCase(tracks, cases[j / 2], j % 2 == 1);
+  };
+  std::vector<std::thread> pool;
+  for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
+  for (std::thread& t : pool) t.join();
+
+  // [configuración][pista][modelo]
+  std::vector<std::vector<std::vector<Outcome>>> table(2, std::vector<std::vector<Outcome>>(tracks.size(), std::vector<Outcome>(3)));
+  Outcome total[2];
+  for (std::size_t j = 0; j < parts.size(); j++) {
+    const Case& c = cases[j / 2];
+    table[j % 2][c.track][c.model].add(parts[j]);
+    total[j % 2].add(parts[j]);
+  }
+  std::printf("Prueba en lazo cerrado: %zu competencias por configuración (3 intentos cada una)\n", cases.size());
+  printOutcome("D clásico (total)", total[0], total[0]);
+  printOutcome("red de la derivada", total[1], total[0]);
+  bool ok = true;
+  const char* models[] = {"nominal", "moderado", "real"};
+  std::printf("\nPor pista y modelo (clásico -> red):\n");
+  for (std::size_t t = 0; t < tracks.size(); t++) {
+    for (int m = 0; m < 3; m++) {
+      const Outcome& a = table[0][t][m];
+      const Outcome& b = table[1][t][m];
+      if (a.laps + a.failures == 0) continue;
+      const double slower = a.meanFastTime() > 0 ? b.meanFastTime() / a.meanFastTime() - 1.0 : 0.0;
+      const bool pass = b.failures <= a.failures && slower <= 0.03;
+      ok = ok && pass;
+      std::printf("  %-26s %-9s salidas %2d->%2d  zigzag %.3f->%.3f  mapa %6.2f->%6.2fs (%+.1f %%)%s\n",
+                  tracks[t].track.name().c_str(), models[m], a.failures, b.failures, a.meanZigzag(), b.meanZigzag(),
+                  a.meanFastTime(), b.meanFastTime(), 100.0 * slower, pass ? "" : "  <- NO CUMPLE");
+    }
+  }
+  std::printf("\n%s\n", ok ? "Cumple por pista y modelo (sin salidas extra, mapa <= +3 %)."
+                           : "No cumple en todas las pistas y modelos.");
+  return ok ? 0 : 2;
+}
+
 }  // namespace gains
 
 }  // namespace
@@ -766,6 +1115,13 @@ int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
   if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
   if (mode == "ganancias") return gains::sweepGains();
-  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | ganancias\n");
+  if (mode == "derivada-prueba") return gains::testDerivative(argc > 2 ? std::atoi(argv[2]) : 3);
+  if (mode == "derivada") {
+    const std::size_t samples = argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 400000;
+    const int lead = argc > 3 ? std::atoi(argv[3]) : 0;
+    const bool write = argc > 4 && std::string(argv[4]) == "escribir";
+    return derivative::train(samples, lead, write);
+  }
+  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | ganancias | derivada [ciclos] [adelanto] [escribir]\n");
   return 1;
 }
