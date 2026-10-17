@@ -26,7 +26,7 @@
   Uso: atlas_train_nn posicion [lecturas]     (25000 por defecto)
        atlas_train_nn ganancias
        atlas_train_nn derivada [ciclos] [adelanto] [escribir]
-       atlas_train_nn derivada-prueba [semillas por pista y modelo]
+       atlas_train_nn derivada-prueba [semillas] [sin-predictor]  (mezclas del D)
        atlas_train_nn predictor [semillas]   (busca el predictor de retraso)
 */
 #include <algorithm>
@@ -1140,16 +1140,22 @@ int compare(const std::vector<TrackEntry>& tracks, const std::vector<Case>& case
   return ok ? 0 : 2;
 }
 
-int testDerivative(int seedsPerTrack) {
+int testDerivative(int seedsPerTrack, bool predictor) {
   if (!atlas::neural::kDerivativeTrained) {
     std::printf("NeuralDerivativeWeights.h no tiene pesos entrenados.\n");
     return 1;
   }
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
+  auto blend = [predictor](uint8_t percent) {
+    return Variant{"D red " + std::to_string(percent) + " %", [percent, predictor](atlas::RobotConfig& c) {
+                     c.control.neuralDerivative = true;
+                     c.control.derivativeBlend = percent;
+                     c.control.latencyCompensation = predictor;
+                   }};
+  };
   const std::vector<Variant> variants = {
-      {"D clásico", nullptr},
-      {"red de la derivada", [](atlas::RobotConfig& c) { c.control.neuralDerivative = true; }}};
-  return compare(tracks, makeCases(tracks, 777000, seedsPerTrack, true), variants, 1);
+      {"D clásico", [predictor](atlas::RobotConfig& c) { c.control.latencyCompensation = predictor; }}, blend(15), blend(25), blend(40), blend(60), blend(100)};
+  return compare(tracks, makeCases(tracks, 777000, seedsPerTrack, true), variants, 0);
 }
 
 // Predictor de retraso: rejilla de shift × ganancia con semillas de búsqueda;
@@ -1204,7 +1210,8 @@ int main(int argc, char** argv) {
   if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
   if (mode == "ganancias") return gains::sweepGains();
   if (mode == "predictor") return gains::testPredictor(argc > 2 ? std::atoi(argv[2]) : 2);
-  if (mode == "derivada-prueba") return gains::testDerivative(argc > 2 ? std::atoi(argv[2]) : 3);
+  if (mode == "derivada-prueba") return gains::testDerivative(argc > 2 ? std::atoi(argv[2]) : 3,
+                                                               !(argc > 3 && std::string(argv[3]) == "sin-predictor"));
   if (mode == "derivada") {
     const std::size_t samples = argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 400000;
     const int lead = argc > 3 ? std::atoi(argv[3]) : 0;

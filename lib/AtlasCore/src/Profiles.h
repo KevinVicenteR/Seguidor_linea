@@ -40,10 +40,15 @@ constexpr RobotConfig fastProfile() {
 // La red jerárquica de control quedó neutra tras entrenarla (no superó a la
 // referencia): se apaga para no gastar tiempo de cálculo. La red de la
 // derivada solo se activa cuando ya fue entrenada.
+// Mezcla de la red de la derivada que se despliega (% sobre el D clásico,
+// atlas_train_nn mezcla); 0 = red apagada.
+constexpr uint8_t kDeployedDerivativeBlend = 0;
+
 constexpr void useNeuralNetworks(RobotConfig& config, bool enabled) {
   config.sensors.neuralPosition = enabled;
   config.control.neuralGains = false;
-  config.control.neuralDerivative = enabled && neural::kDerivativeTrained;
+  config.control.neuralDerivative = enabled && neural::kDerivativeTrained && kDeployedDerivativeBlend > 0;
+  config.control.derivativeBlend = kDeployedDerivativeBlend;
 }
 
 }  // namespace atlas

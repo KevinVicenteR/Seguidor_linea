@@ -27,9 +27,11 @@ int16_t PdController::update(int32_t error, uint8_t kpPercent, uint8_t kdPercent
   return combine(error, filteredDelta_, kpPercent, kdPercent);
 }
 
-int16_t PdController::updateWithDerivative(int32_t error, int32_t derivative, uint8_t kpPercent, uint8_t kdPercent) {
+int16_t PdController::updateWithDerivative(int32_t error, int32_t derivative, uint8_t blendPercent,
+                                           uint8_t kpPercent, uint8_t kdPercent) {
   filterDelta(error);
-  return combine(error, derivative, kpPercent, kdPercent);
+  const int32_t blended = filteredDelta_ + (derivative - filteredDelta_) * blendPercent / 100;
+  return combine(error, blended, kpPercent, kdPercent);
 }
 
 // Única copia de la cuenta en punto flotante (la flash del AVR está justa).

@@ -279,7 +279,7 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
           : error;
   int16_t correction;
   if (control.neuralDerivative && historyCount_ >= kErrorHistory) {
-    correction = pd_.updateWithDerivative(pdError, neuralDerivative(), kpPercent, kdPercent);
+    correction = pd_.updateWithDerivative(pdError, neuralDerivative(), control.derivativeBlend, kpPercent, kdPercent);
   } else if (control.neuralGains) {
     correction = pd_.update(pdError, kpPercent, kdPercent);
   } else {

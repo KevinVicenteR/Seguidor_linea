@@ -71,3 +71,23 @@ adelanto 10:
 ```
 
 Conclusión: la red estima la derivada con 77 % menos error, pero en lazo cerrado aumenta el zigzag visible (0.91 -> 1.2 /m) y no cumple el +3 % en 8 pistas/modelos, sobre todo con los robots de más retraso. Se deja desactivada (kDerivativeTrained = false).
+
+## D combinado (filtro complementario), 2026-10-17
+
+D = D clásico + α·(D red − D clásico). Red reentrenada con el predictor activo
+(validación: red 10.0 contra D clásico 58.3 unidades/ciclo). 66 competencias
+por variante:
+
+| α | con predictor (zigzag ±10 mm) | sin predictor |
+|---|---|---|
+| 0 % (clásico) | **0.868/m** | **0.907/m** |
+| 15 % | 0.890 | 0.932 |
+| 25 % | 0.918 | 0.962 |
+| 40 % | 0.949 | 0.997 |
+| 60 % | 1.013 (no cumple) | 1.044 (no cumple) |
+| 100 % | 1.189 (no cumple) | 1.237 (no cumple) |
+
+Cualquier proporción de la red empeora: el "ruido" del D clásico lleva
+información útil y adelantada (la línea pasando de un sensor a otro), y
+suavizarlo quita amortiguación. Se despliega α = 0 (kDeployedDerivativeBlend);
+los pesos quedan compilados pero la red no se evalúa.

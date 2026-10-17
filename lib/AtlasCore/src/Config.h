@@ -89,6 +89,8 @@ struct ControlConfig {
   // mueve la línea bajo la barra con el historial del error (1-16 ciclos), sin
   // el ruido ni el retraso del filtro del derivativo. Reemplaza al D filtrado.
   bool neuralDerivative = false;
+  // Mezcla del D: 0 = D filtrado clásico, 100 = solo la red de la derivada.
+  uint8_t derivativeBlend = 100;
   // Compensación del retraso del motor (LatencyPredictor.h): el PD usa el error
   // menos lo que la corrección ya mandada todavía va a mover la línea.
   // predictorShift: los motores siguen la corrección en ~2^shift ciclos;
