@@ -6,7 +6,7 @@ namespace atlas {
 constexpr bool kUseNeuralNetwork = true;
 
 constexpr RobotConfig firmwareConfig(RobotConfig config, bool neural = kUseNeuralNetwork) {
-  config.speed.basePwm = 60;
+  config.speed.basePwm = 120;
   config.speed.minPwm = 60;
   config.speed.maxPwm = 250;
   config.speed.stepPwm = 10;
