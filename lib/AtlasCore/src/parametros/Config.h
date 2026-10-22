@@ -10,6 +10,8 @@
 
 #include <stdint.h>
 
+#include "ImpellerConfig.h"
+
 namespace atlas {
 
 struct NeuralHierarchy;
@@ -113,14 +115,6 @@ struct SpeedConfig {
   // necesita más fuerza para empezar a moverse.
   int16_t startKickPwm = 100;
   uint16_t startKickMs = 200;
-};
-
-struct ImpellerConfig {
-  int16_t pwm = 200;
-  uint16_t startRampMs = 1000;  // rampa con la señal READY (si spinWithReady)
-  uint16_t runRampMs = 250;     // rampa al iniciar la carrera
-  // false: la turbina solo gira con GO y se apaga en cuanto se quita GO.
-  bool spinWithReady = false;
 };
 
 struct LostLineConfig {

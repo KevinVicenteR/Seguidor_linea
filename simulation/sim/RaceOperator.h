@@ -11,7 +11,7 @@
 */
 #pragma once
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "RaceMonitor.h"
 #include "RobotModel.h"
 #include "SimHardware.h"

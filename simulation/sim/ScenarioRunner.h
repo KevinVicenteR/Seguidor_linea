@@ -6,10 +6,10 @@
 
 #include <functional>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
-#include "Profiles.h"
+#include "parametros/Profiles.h"
 #include "RobotModel.h"
 #include "Scenario.h"
 #include "SimHardware.h"
@@ -26,8 +26,10 @@ class ScenarioRunner {
  public:
   explicit ScenarioRunner(RobotParams robot = RobotParams(), SensorModel sensors = SensorModel(),
                           atlas::RobotConfig firmware = atlas::safeProfile(),
-                          atlas::RobotConfig fastFirmware = atlas::fastProfile())
-      : robotParams_(robot), sensorModel_(sensors), firmware_(firmware), fastFirmware_(fastFirmware) {}
+                          atlas::RobotConfig fastFirmware = atlas::fastProfile(),
+                          const atlas::RobotConfig* thirdFirmware = nullptr)
+      : robotParams_(robot), sensorModel_(sensors), firmware_(firmware), fastFirmware_(fastFirmware),
+        thirdFirmware_(thirdFirmware != nullptr ? *thirdFirmware : fastFirmware) {}
 
   ScenarioResult run(const TrackEntry& entry, const ScenarioSpec& spec) const;
   // Corre spec.attempts intentos seguidos sobre el mismo robot (con su EEPROM).
@@ -39,6 +41,7 @@ class ScenarioRunner {
   SensorModel sensorModel_;
   atlas::RobotConfig firmware_;      // perfil Seguro (o configuración única)
   atlas::RobotConfig fastFirmware_;  // perfil Rápido para intentos con mapa
+  atlas::RobotConfig thirdFirmware_; // tercera ronda, independiente de la segunda
   ControlObserver observer_;
 };
 

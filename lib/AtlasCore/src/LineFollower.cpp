@@ -27,7 +27,7 @@ void LineFollower::useConfig(const RobotConfig& config) {
   planner_.configure(config.planner);
 }
 
-void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
+void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode, int16_t initialImpellerPwm) {
   mode_ = map_ == nullptr ? RunMode::Plain : mode;
   if (mode_ == RunMode::MapGuided && !map_->isValid()) mode_ = RunMode::Mapping;
   if (mode_ == RunMode::Mapping) map_->startRecording();
@@ -59,7 +59,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   startMs_ = nowMs;
   const SpeedConfig& speed = config_->speed;
   velocityRamp_.start(nowMs + speed.startKickMs, speed.runRampMs, speed.startKickPwm, cruisePwm);
-  impellerRamp_.start(nowMs, config_->impeller.runRampMs, 0, config_->impeller.pwm);
+  turbine_.startRun(nowMs, config_->impeller, initialImpellerPwm);
 
   running_ = true;
   stopping_ = false;
@@ -75,6 +75,7 @@ void LineFollower::requestStop(uint32_t nowMs) {
   if (!running_ || stopping_) return;
   brakeRamp_.start(nowMs, config_->speed.stopBrakeMs, currentVelocity(nowMs), 0);
   stopping_ = true;
+  turbine_.stop();
   drivetrain_.impeller().setPwm(0);
   noteHowRunEnded(nowMs);
 }
@@ -132,7 +133,7 @@ void LineFollower::update(uint32_t nowMs) {
   }
   command_.left = clampWheel(command_.left);
   command_.right = clampWheel(command_.right);
-  command_.impeller = stopping_ ? 0 : impellerRamp_.valueAt(nowMs);  // la turbina se apaga con el stop
+  command_.impeller = stopping_ ? 0 : turbine_.pwmAt(nowMs);  // la turbina se apaga con el stop
   apply(command_);
   if (mode_ == RunMode::Mapping) recordCurvature();
   trackDistance();

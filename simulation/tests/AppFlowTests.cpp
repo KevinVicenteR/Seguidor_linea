@@ -58,17 +58,32 @@ TEST("Secuencia completa: calibración, velocidad, READY, GO y paro") {
   EXPECT_EQ(rig.app.cruisePwm(), rig.config.speed.basePwm + rig.config.speed.stepPwm);
 
   rig.panel.setReady(true);
+  rig.tickFor(500);
+  EXPECT_TRUE(rig.drivetrain.impellerMotor.pwm > 0);
+  EXPECT_TRUE(rig.drivetrain.impellerMotor.pwm < rig.config.impeller.pwm);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+  EXPECT_EQ(rig.drivetrain.rightMotor.pwm, 0);
+  EXPECT_FALSE(rig.drivetrain.enabled);
+  rig.panel.setReady(false);
+  rig.app.tick();
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
+  rig.panel.setReady(true);
   rig.tickFor(1100);
-  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);  // la turbina no gira antes de GO
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
 
   rig.bus.lineAt(7, 8);  // línea negra centrada
   rig.panel.setGo(true);
+  rig.app.tick();
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
+  rig.tickFor(5);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
   rig.tickFor(300);
   EXPECT_TRUE(rig.app.state() == AppState::Running);
   EXPECT_TRUE(rig.drivetrain.enabled);
   EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);  // gira con GO
 
   rig.panel.setGo(false);
+  rig.panel.setReady(false);
   rig.tickFor(5);
   EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);  // se apaga en cuanto se quita GO
   rig.panel.setGo(true);
@@ -246,6 +261,91 @@ void runRace(AppRig& rig, AtlasApp& app, uint32_t ms) {
   for (uint64_t end = rig.clock.nowUs() + 1200 * 1000ULL; rig.clock.nowUs() < end; rig.clock.advanceUs(50)) app.tick();
 }
 }  // namespace
+
+TEST("Cada ronda aplica su turbina y recalibrar vuelve al reconocimiento") {
+  AppRig rig;
+  TrackMap map;
+  RobotConfig second = rig.config;
+  RobotConfig third = rig.config;
+  second.impeller.pwm = 140;
+  third.impeller.pwm = 180;
+  second.planner.maxPwm = 120;
+  third.planner.maxPwm = 180;
+  AppOptions options;
+  options.trackMap = &map;
+  options.fastConfig = &second;
+  options.thirdConfig = &third;
+  AtlasApp app{rig.clock, rig.panel, rig.panel, rig.sensors, rig.drivetrain, rig.follower, rig.config, options};
+  const auto tickFor = [&](uint32_t ms) {
+    const uint64_t end = rig.clock.nowUs() + ms * 1000ULL;
+    while (rig.clock.nowUs() < end) {
+      app.tick();
+      rig.clock.advanceUs(50);
+    }
+  };
+  app.begin();
+  calibrateApp(rig, app);
+  EXPECT_TRUE(app.nextRound() == Round::First);
+  runRace(rig, app, 4000);
+  EXPECT_TRUE(app.hasTrackMap());
+  EXPECT_TRUE(app.nextRound() == Round::Second);
+  rig.panel.setReady(true);
+  tickFor(1100);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, second.impeller.pwm);
+  rig.panel.setGo(true);
+  tickFor(300);
+  EXPECT_TRUE(rig.follower.mode() == RunMode::MapGuided);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, second.impeller.pwm);
+  const int16_t secondSpeed = rig.follower.lastCommand().left;
+  rig.panel.setReady(false);
+  runRace(rig, app, 1000);
+  EXPECT_TRUE(app.nextRound() == Round::Third);
+  rig.panel.setReady(true);
+  tickFor(1100);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, third.impeller.pwm);
+  rig.panel.setGo(true);
+  tickFor(300);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, third.impeller.pwm);
+  EXPECT_TRUE(rig.follower.lastCommand().left > secondSpeed);
+  rig.panel.setReady(false);
+  runRace(rig, app, 1000);
+  EXPECT_TRUE(app.nextRound() == Round::Third);
+  rig.panel.pressButton1(true);
+  rig.panel.pressButton2(true);
+  app.tick();
+  EXPECT_TRUE(app.state() == AppState::Calibrating);
+  EXPECT_TRUE(app.nextRound() == Round::First);
+}
+
+TEST("START/GO durante el giro previo conserva la rampa de turbina") {
+  AppRig rig;
+  rig.app.begin();
+  calibrateApp(rig, rig.app);
+  rig.panel.setReady(true);
+  rig.tickFor(500);
+  const int16_t preSpinPwm = rig.drivetrain.impellerMotor.pwm;
+  rig.bus.lineAt(7, 8);
+  rig.panel.setGo(true);
+  rig.app.tick();
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, preSpinPwm);
+  rig.tickFor(5);
+  EXPECT_TRUE(rig.drivetrain.impellerMotor.pwm >= preSpinPwm);
+  rig.tickFor(rig.config.impeller.runRampMs);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
+}
+
+TEST("Recalibrar cancela el giro previo de la turbina") {
+  AppRig rig;
+  rig.app.begin();
+  calibrateApp(rig, rig.app);
+  rig.panel.setReady(true);
+  rig.tickFor(1100);
+  rig.panel.pressButton1(true);
+  rig.panel.pressButton2(true);
+  rig.app.tick();
+  EXPECT_TRUE(rig.app.state() == AppState::Calibrating);
+  EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, 0);
+}
 
 TEST("La calibración se guarda y se carga al volver a encender") {
   MemoryStorage eeprom;

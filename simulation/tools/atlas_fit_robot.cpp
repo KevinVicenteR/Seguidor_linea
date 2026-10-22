@@ -28,7 +28,7 @@
 #include <thread>
 #include <vector>
 
-#include "FirmwareConfig.h"
+#include "parametros/FirmwareConfig.h"
 #include "ScenarioRunner.h"
 #include "TrackLibrary.h"
 

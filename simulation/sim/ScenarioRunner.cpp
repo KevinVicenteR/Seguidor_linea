@@ -101,11 +101,13 @@ std::vector<ScenarioResult> ScenarioRunner::runAttempts(const TrackEntry& entry,
 
   atlas::RobotConfig config = firmware_;
   atlas::RobotConfig fastConfig = fastFirmware_;
-  for (atlas::RobotConfig* c : {&config, &fastConfig}) {
+  atlas::RobotConfig thirdConfig = thirdFirmware_;
+  for (atlas::RobotConfig* c : {&config, &fastConfig, &thirdConfig}) {
     c->impeller.pwm = spec.impellerPwm;
     c->sensors.lineColor = spec.lineColor;
   }
   if (spec.fastImpellerPwm >= 0) fastConfig.impeller.pwm = spec.fastImpellerPwm;
+  thirdConfig.impeller.pwm = spec.thirdImpellerPwm >= 0 ? spec.thirdImpellerPwm : fastConfig.impeller.pwm;
 
   SensorModel sensorModel = sensorModel_;
   sensorModel.noiseSigma = spec.sensorNoiseSigma;
@@ -126,6 +128,7 @@ std::vector<ScenarioResult> ScenarioRunner::runAttempts(const TrackEntry& entry,
     options.storage = &eeprom;
     options.trackMap = &trackMap;
     options.fastConfig = &fastConfig;
+    options.thirdConfig = &thirdConfig;
   }
   atlas::AtlasApp app(clock, panel, panel, sensors, drivetrain, follower, config, options);
 

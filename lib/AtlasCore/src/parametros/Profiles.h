@@ -10,7 +10,7 @@
 #pragma once
 
 #include "Config.h"
-#include "NeuralDerivativeWeights.h"
+#include "../NeuralDerivativeWeights.h"
 
 namespace atlas {
 

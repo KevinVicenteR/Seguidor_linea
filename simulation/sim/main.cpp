@@ -16,7 +16,7 @@
 #include <thread>
 #include <vector>
 
-#include "FirmwareConfig.h"
+#include "parametros/FirmwareConfig.h"
 #include "Report.h"
 #include "ScenarioRunner.h"
 #include "TrackLibrary.h"
@@ -86,12 +86,14 @@ std::vector<ScenarioSpec> buildScenarios(const std::vector<TrackEntry>& tracks, 
     std::vector<ScenarioSpec> specs;
     const auto safe = atlas::firmwareSafeConfig(options.neuralNetwork);
     const auto fast = atlas::firmwareFastConfig(options.neuralNetwork);
+    const auto third = atlas::firmwareThirdConfig(options.neuralNetwork);
     for (std::size_t i = 0; i < tracks.size(); ++i) {
       if (options.onlyTrack >= 0 && static_cast<int>(i) != options.onlyTrack) continue;
       const auto& name = tracks[i].track.name();
       ScenarioSpec spec = makeSpec(i, name, safe.speed.basePwm, !isBeyondGeometry(name), " · firmware");
       spec.impellerPwm = safe.impeller.pwm;
       spec.fastImpellerPwm = fast.impeller.pwm;
+      spec.thirdImpellerPwm = third.impeller.pwm;
       spec.learnTrack = true;
       spec.attempts = 3;
       specs.push_back(spec);
@@ -182,9 +184,11 @@ std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const 
   std::atomic<std::size_t> done{0};
   atlas::RobotConfig safe = firmware ? atlas::firmwareSafeConfig() : atlas::safeProfile();
   atlas::RobotConfig fast = firmware ? atlas::firmwareFastConfig() : atlas::fastProfile();
+  atlas::RobotConfig third = firmware ? atlas::firmwareThirdConfig() : fast;
   atlas::useNeuralNetworks(safe, neuralNetwork);
   atlas::useNeuralNetworks(fast, neuralNetwork);
-  const ScenarioRunner runner(RobotParams(), SensorModel(), safe, fast);
+  atlas::useNeuralNetworks(third, neuralNetwork);
+  const ScenarioRunner runner(RobotParams(), SensorModel(), safe, fast, &third);
 
   auto worker = [&]() {
     for (std::size_t i = next++; i < specs.size(); i = next++) {

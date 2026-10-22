@@ -7,7 +7,7 @@
 
 #include <Arduino.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Hal.h"
 #include "LineSensorArray.h"
 #include "StatusLeds.h"

@@ -44,11 +44,11 @@
 #include <thread>
 #include <vector>
 
-#include "FirmwareConfig.h"
+#include "parametros/FirmwareConfig.h"
 #include "LineSensorArray.h"
 #include "NeuralDerivativeWeights.h"
 #include "NeuralPositionWeights.h"
-#include "Profiles.h"
+#include "parametros/Profiles.h"
 #include "ScenarioRunner.h"
 #include "TinyMlp.h"
 #include "TrackLibrary.h"

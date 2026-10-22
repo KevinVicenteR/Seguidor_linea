@@ -182,15 +182,19 @@ TEST("Red jerárquica: la principal elige qué subneurona manda") {
 }
 
 // La misma factoría se usa en AVR y en --firmware, también para el control clásico.
-#include "FirmwareConfig.h"
+#include "parametros/FirmwareConfig.h"
 TEST("Ajustes de despliegue conservan velocidades y activan las redes entrenadas") {
   for (bool neural : {false, true}) {
     const auto safe = firmwareSafeConfig(neural);
     const auto fast = firmwareFastConfig(neural);
-    EXPECT_EQ(safe.speed.basePwm, 170);
-    EXPECT_EQ(safe.impeller.pwm, 190);
-    EXPECT_EQ(fast.speed.basePwm, 170);
-    EXPECT_EQ(fast.impeller.pwm, 235);
+    EXPECT_EQ(safe.speed.basePwm, 60);
+    EXPECT_EQ(safe.speed.startKickPwm, safe.speed.minPwm);
+    EXPECT_EQ(safe.impeller.pwm, kPrimeraRondaTurbinaPwm);
+    EXPECT_TRUE(safe.impeller.spinWithReady);
+    EXPECT_EQ(fast.speed.basePwm, 60);
+    EXPECT_EQ(fast.speed.startKickPwm, fast.speed.minPwm);
+    EXPECT_EQ(fast.impeller.pwm, kSegundaRondaTurbinaPwm);
+    EXPECT_TRUE(fast.impeller.spinWithReady);
     EXPECT_EQ(safe.sensors.neuralPosition, neural);
     EXPECT_FALSE(safe.control.neuralGains);  // la red jerárquica quedó neutra: apagada
     EXPECT_EQ(safe.control.neuralDerivative, neural && neural::kDerivativeTrained && kDeployedDerivativeBlend > 0);

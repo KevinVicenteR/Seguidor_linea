@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "TrackMap.h"
 
 namespace atlas {

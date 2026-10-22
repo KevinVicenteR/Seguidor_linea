@@ -18,7 +18,7 @@ endif()
 enable_testing()
 
 # --- Núcleo de control (el mismo código que corre en el robot) -------------
-file(GLOB ATLAS_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src/*.cpp)
+file(GLOB_RECURSE ATLAS_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src/*.cpp)
 add_library(atlas_core STATIC ${ATLAS_CORE_SOURCES})
 target_include_directories(atlas_core PUBLIC ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src)
 target_compile_options(atlas_core PRIVATE -Wall -Wextra -Wpedantic)

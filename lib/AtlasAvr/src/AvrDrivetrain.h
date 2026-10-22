@@ -6,7 +6,7 @@
 
 #include <Arduino.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Hal.h"
 
 namespace atlas {

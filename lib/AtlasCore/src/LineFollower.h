@@ -8,13 +8,14 @@
 
 #include <stdint.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Hal.h"
 #include "LatencyPredictor.h"
 #include "LineSensorArray.h"
 #include "OscillationGuard.h"
 #include "PdController.h"
 #include "Ramp.h"
+#include "turbina/TurbineControl.h"
 #include "SpeedGovernor.h"
 #include "SpeedPlanner.h"
 #include "TrackMap.h"
@@ -40,7 +41,8 @@ class LineFollower {
   // Cambia el perfil de manejo (Seguro / Rápido). Solo entre carreras.
   void useConfig(const RobotConfig& config);
   void attachTrackMap(TrackMap* map) { map_ = map; }
-  void start(int16_t cruisePwm, uint32_t nowMs, RunMode mode = RunMode::Plain);
+  void start(int16_t cruisePwm, uint32_t nowMs, RunMode mode = RunMode::Plain,
+             int16_t initialImpellerPwm = 0);
   // Cierra la vuelta de reconocimiento; devuelve true si el mapa quedó válido.
   bool finishMapping();
   // La carrera se considera fallida (robot fuera de la pista).
@@ -133,7 +135,7 @@ class LineFollower {
   bool recovering_ = false;
 
   LinearRamp velocityRamp_;
-  LinearRamp impellerRamp_;
+  TurbineControl turbine_;
   LinearRamp brakeRamp_;
 
   uint32_t startMs_ = 0;

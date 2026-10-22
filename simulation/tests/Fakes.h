@@ -3,7 +3,7 @@
 */
 #pragma once
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Hal.h"
 
 namespace test {

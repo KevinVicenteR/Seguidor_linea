@@ -19,10 +19,10 @@
 #include "AvrEepromStorage.h"
 #include "AvrLineSensorBus.h"
 #include "AvrOperatorPanel.h"
-#include "Config.h"
+#include "parametros/Config.h"
 #include "LineFollower.h"
 #include "LineSensorArray.h"
-#include "FirmwareConfig.h"
+#include "parametros/FirmwareConfig.h"
 #include "TrackMap.h"
 #ifdef ATLAS_LOG
 #include "AvrRaceLogger.h"
@@ -36,8 +36,9 @@ constexpr MotorPolarity kRightMotorPolarity = MotorPolarity::Normal;
 
 // Ajustes compartidos con el modo --firmware del simulador.
 // constexpr: calculadas al compilar (sin código de inicialización al arrancar).
-constexpr RobotConfig kSafeConfig = firmwareSafeConfig();
-constexpr RobotConfig kFastConfig = firmwareFastConfig();
+constexpr RobotConfig kSafeConfig = primeraRondaConfig();
+constexpr RobotConfig kFastConfig = segundaRondaConfig();
+constexpr RobotConfig kThirdConfig = terceraRondaConfig();
 
 
 AvrClock robotClock;
@@ -55,6 +56,7 @@ AppOptions makeAppOptions() {
   AppOptions options;
   options.diagnostics = &diagnostics;
   options.fastConfig = &kFastConfig;
+  options.thirdConfig = &kThirdConfig;
   options.storage = &eeprom;
   options.trackMap = &trackMap;
   return options;

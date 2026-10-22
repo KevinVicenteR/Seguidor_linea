@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <random>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Hal.h"
 #include "RobotModel.h"
 #include "Track.h"

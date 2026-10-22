@@ -28,7 +28,7 @@
 
 #include <stdint.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "CalibrationStore.h"
 #include "Hal.h"
 #include "LineFollower.h"
@@ -37,7 +37,8 @@
 #include "SpeedSettingStore.h"
 #include "TrackMap.h"
 #include "TrackMapStore.h"
-#include "Ramp.h"
+#include "rondas/RoundControl.h"
+#include "turbina/TurbineControl.h"
 #include "StatusLeds.h"
 
 namespace atlas {
@@ -46,6 +47,7 @@ namespace atlas {
 struct AppOptions {
   IDiagnostics* diagnostics = nullptr;     // modo de diagnóstico (solo hardware real)
   const RobotConfig* fastConfig = nullptr;  // perfil Rápido para las carreras con mapa
+  const RobotConfig* thirdConfig = nullptr; // tercera ronda; si falta usa fastConfig
   IPersistentStorage* storage = nullptr;    // guardar calibración y mapa al apagar
   TrackMap* trackMap = nullptr;             // aprendizaje de pista
 };
@@ -64,7 +66,9 @@ class AtlasApp {
   AppState state() const { return state_; }
   int16_t cruisePwm() const { return cruisePwm_; }
   uint16_t racesCompleted() const { return racesCompleted_; }
-  // La próxima carrera será guiada por el mapa aprendido (perfil Rápido).
+  // Ronda que se usará al dar START/GO.
+  Round nextRound() const { return rounds_.next(hasTrackMap()); }
+  // Con mapa válido, la próxima carrera usa el perfil de segunda/tercera ronda.
   bool hasTrackMap() const { return trackMap_ != nullptr && trackMap_->isValid(); }
 
  private:
@@ -99,14 +103,15 @@ class AtlasApp {
   const RobotConfig& config_;
   IDiagnostics* diagnostics_;
   const RobotConfig* fastConfig_;
+  const RobotConfig* thirdConfig_;
+  RoundControl rounds_;
   IPersistentStorage* storage_;
   TrackMap* trackMap_;
 
   AppState state_ = AppState::Boot;
   int16_t cruisePwm_;
   bool calibrationBlink_ = true;
-  bool preSpinActive_ = false;
-  LinearRamp preSpinRamp_;
+  TurbineControl turbine_;
   uint32_t lastControlUs_ = 0;
   uint16_t racesCompleted_ = 0;
   uint32_t raceStartMs_ = 0;

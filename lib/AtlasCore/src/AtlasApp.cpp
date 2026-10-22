@@ -1,13 +1,8 @@
 #include "AtlasApp.h"
+#include "parametros/AppParameters.h"
 
 namespace atlas {
 
-namespace {
-constexpr uint16_t kUiBlinkMs = 250;
-constexpr uint16_t kConfirmHalfPeriodMs = 250;
-constexpr uint16_t kStopSettleMs = 500;
-constexpr uint16_t kFastIndicatorHalfPeriodMs = 300;
-}  // namespace
 
 AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators, LineSensorArray& sensors,
                    IDrivetrain& drivetrain, LineFollower& follower, const RobotConfig& config,
@@ -21,6 +16,7 @@ AtlasApp::AtlasApp(IClock& clock, IOperatorInput& input, IIndicators& indicators
       config_(config),
       diagnostics_(options.diagnostics),
       fastConfig_(options.fastConfig),
+      thirdConfig_(options.thirdConfig),
       storage_(options.storage),
       trackMap_(options.trackMap),
       cruisePwm_(config.speed.basePwm) {
@@ -101,32 +97,10 @@ void AtlasApp::forgetTrackMap() {
   if (storage_ != nullptr) TrackMapStore(*storage_).erase();
 }
 
-void AtlasApp::saveTrackMapIfLearned() {
-  const bool wasMapping = follower_.mode() == RunMode::Mapping;
-  const bool learned = follower_.finishMapping();
-  if (wasMapping && !learned) {
-    leds_.mapRejected();
-    if (storage_ != nullptr) TrackMapStore(*storage_).erase();
-    return;
-  }
-  const bool corrected = follower_.correctMapAfterFailedRun();
-  if ((learned || corrected) && storage_ != nullptr) TrackMapStore(*storage_).save(*trackMap_);
-}
-
-// Registra la carrera (tipo, tiempo, si falló y dónde) para el análisis.
-void AtlasApp::logRace() {
-  if (storage_ == nullptr) return;
-  RunRecord record;
-  record.mode = static_cast<uint8_t>(follower_.mode());
-  record.failed = follower_.runFailed();
-  const uint32_t centiseconds = (raceStopMs_ - raceStartMs_) / 10;
-  record.timeCentiseconds = centiseconds > 0xFFFF ? 0xFFFF : static_cast<uint16_t>(centiseconds);
-  record.failureBin = follower_.failureBin();
-  record.mapLength = trackMap_ != nullptr ? trackMap_->length() : 0;
-  RunLog(*storage_).append(record);
-}
-
 void AtlasApp::startCalibration() {
+  drivetrain_.impeller().setPwm(0);
+  turbine_.stop();
+  rounds_.reset();
   forgetTrackMap();
   leds_.blink(Led::Led2, kUiBlinkMs);
   sensors_.resetCalibration();
@@ -178,110 +152,5 @@ void AtlasApp::updateReadyIndicator() {
   leds_.set(Led::Led0, phase);
   leds_.set(Led::Led1, !phase);
 }
-
-//  ---------------------------------------------------------------------------
-//  Preparación: selección de velocidad y pre-giro del impeller con READY
-//  ---------------------------------------------------------------------------
-
-void AtlasApp::prepareToRun() {
-  if (input_.startGo()) {
-    startRace();
-    return;
-  }
-  if (recalibrationRequested()) {
-    drivetrain_.impeller().setPwm(0);
-    startCalibration();
-    return;
-  }
-  updateImpellerPreSpin();
-  adjustCruiseSpeed();
-  updateReadyIndicator();
-}
-
-// SW1 + SW2 juntos en Ready: repetir la calibración sin presionar RESET.
-bool AtlasApp::recalibrationRequested() { return input_.button1() && input_.button2(); }
-
-void AtlasApp::updateImpellerPreSpin() {
-  const uint32_t now = clock_.millis();
-
-  if (!config_.impeller.spinWithReady || !input_.startReady()) {
-    preSpinActive_ = false;
-    leds_.set(Led::Led2, false);
-    drivetrain_.impeller().setPwm(0);
-    return;
-  }
-
-  if (!preSpinActive_) {
-    preSpinRamp_.start(now, config_.impeller.startRampMs, 0, config_.impeller.pwm);
-    preSpinActive_ = true;
-  }
-  drivetrain_.impeller().setPwm(preSpinRamp_.valueAt(now));
-  leds_.set(Led::Led2, preSpinRamp_.isFinished(now));
-}
-
-void AtlasApp::adjustCruiseSpeed() {
-  const SpeedConfig& speed = config_.speed;
-
-  if (input_.button1() && cruisePwm_ >= speed.minPwm + speed.stepPwm) {
-    leds_.blink(Led::Led0, kUiBlinkMs);
-    cruisePwm_ -= speed.stepPwm;
-    saveSpeed();
-  } else if (input_.button2() && cruisePwm_ <= speed.maxPwm - speed.stepPwm) {
-    leds_.blink(Led::Led1, kUiBlinkMs);
-    cruisePwm_ += speed.stepPwm;
-    saveSpeed();
-  }
-}
-
-//  ---------------------------------------------------------------------------
-//  Carrera
-//  ---------------------------------------------------------------------------
-
-void AtlasApp::startRace() {
-  drivetrain_.impeller().setPwm(0);
-  leds_.setAll(true);
-  const bool guided = hasTrackMap();
-  follower_.useConfig(guided && fastConfig_ != nullptr ? *fastConfig_ : config_);
-  const RunMode mode = trackMap_ == nullptr ? RunMode::Plain : (guided ? RunMode::MapGuided : RunMode::Mapping);
-  raceStartMs_ = clock_.millis();
-  raceStopMs_ = raceStartMs_;
-  follower_.start(cruisePwm_, raceStartMs_, mode);
-  lastControlUs_ = clock_.micros();
-  state_ = AppState::Running;
-}
-
-void AtlasApp::run() {
-  const uint32_t nowUs = clock_.micros();
-  if (nowUs - lastControlUs_ >= config_.control.loopPeriodUs) {
-    lastControlUs_ = nowUs;
-    follower_.update(clock_.millis());
-  }
-
-  if (!input_.startGo() && !follower_.isStopping()) {
-    leds_.setAll(false);
-    raceStopMs_ = clock_.millis();
-    follower_.requestStop(raceStopMs_);
-  }
-
-  if (!follower_.isRunning()) finishRace();
-}
-
-// Detiene todo y vuelve a Ready conservando calibración y velocidad.
-void AtlasApp::finishRace() {
-  drivetrain_.left().setPwm(0);
-  drivetrain_.right().setPwm(0);
-  drivetrain_.impeller().setPwm(0);
-  drivetrain_.disable();
-  clock_.delayMs(kStopSettleMs);
-
-  logRace();
-  saveTrackMapIfLearned();
-  racesCompleted_++;
-  preSpinActive_ = false;
-  leds_.setAll(false);
-  updateReadyIndicator();
-  state_ = AppState::Ready;
-}
-
 
 }  // namespace atlas

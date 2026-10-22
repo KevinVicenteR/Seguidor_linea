@@ -48,11 +48,11 @@ Coloca el robot en el mismo INICIO en todos los intentos: el mapa se mide desde 
 
 Con turbina, 10 variantes por modelo de robot: 0 fallas en 90 intentos; reconocimiento 13.8–15.4 s y vueltas con mapa 8.6 s (nominal) a 12.9 s (robot real). En la pista de competencia mejoró también: 13.2 s con mapa (robot real 17.7 s).
 
-**Turbina:** solo gira con **GO** (rampa de 0.25 s a PWM 200) y se apaga **en cuanto se quita GO**; READY ya no la enciende (`impeller.spinWithReady = false`). Conéctala a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
+**Turbina:** **PROGRAM / READY** enciende la turbina con una rampa de 1 s, con las ruedas quietas. **START / GO** inicia la carrera sin apagar ni reiniciar la turbina. GO directo también funciona, con una rampa de 0.25 s. Quitar READY antes de correr apaga la turbina; quitar GO durante la carrera la apaga inmediatamente. Si READY sigue activo al volver al estado listo, vuelve a iniciar el giro previo.
 
-**Con turbina el robot queda pegado a la pista** y los motores necesitan más fuerza para moverse (con PWM 60 casi no avanzaba). Por eso:
-- **Arranque firme:** los primeros 0.2 s sale con PWM 100 aunque la velocidad elegida sea menor (`speed.startKickPwm`, `startKickMs`).
-- **Compensación de zona muerta:** cualquier PWM distinto de cero empieza en 52 y escala hasta 255 (`control.minMotorPwm`), así PWM 60 sí avanza.
+Las velocidades de turbina de las tres rondas (PWM 235 en cada una) se ajustan en `lib/AtlasCore/src/rondas/PrimeraRonda.h`, `SegundaRonda.h` y `TerceraRonda.h`. Las rampas comunes y `spinWithReady` están en `lib/AtlasCore/src/parametros/ImpellerConfig.h`. Conéctala a la salida 2S de la batería. Para probarla sin correr: modo diagnóstico, opción [1] IMPELLER.
+
+**Motores:** la velocidad inicial del firmware y el impulso de los primeros 0.2 s quedan en PWM 60, el mínimo configurado en el proyecto. No se ha confirmado ese valor con una especificación del fabricante. La compensación de zona muerta (`control.minMotorPwm = 40`) sigue aplicándose a la salida de las ruedas. Si ya hay una velocidad guardada en EEPROM, esta tiene prioridad para el crucero: SW1 permite bajarla hasta 60.
 
 En simulación, con la succión frenando los motores: pista de práctica y de competencia con 0 fallas en los intentos con mapa; reconocimiento a PWM 60 de la pista de práctica con 1 falla en 30 (robot "real").
 
@@ -74,7 +74,7 @@ El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si s
 
 ## Red neuronal (rama `neouronal`)
 
-**Interruptor:** `kUseNeuralNetwork` en `src/main.cpp` (`true` = red activa; `false` = control clásico de antes). En el simulador: `atlas_sim --sin-red` para comparar.
+**Interruptor:** `kUseNeuralNetwork` en `lib/AtlasCore/src/parametros/FirmwareParameters.h` (`true` = red activa; `false` = control clásico de antes). En el simulador: `atlas_sim --sin-red` para comparar.
 
 ### Fase 1: posición fina de la línea
 - **Qué hace:** una red pequeña (7 entradas → 8 neuronas ReLU → 1 salida, 76 pesos y sesgos en la flash) lee los 7 sensores alrededor de la línea **sin el umbral del 50 %**. Así también ve los sensores apenas cubiertos, que el promedio ponderado descarta, y calcula la posición con más precisión. Solo reemplaza la posición; los cruces, picos, huecos y bordes siguen con la lógica de siempre. En los extremos de la barra y en grupos anchos usa el promedio ponderado, y su resultado nunca se aleja más de ±300 (±2.7 mm) de él.
@@ -131,8 +131,16 @@ Soluciones en el firmware: **auto-amortiguación** (`OscillationGuard`: baja Kp 
 ```
 platformio.ini            Firmware (botón "Upload" de PlatformIO, USBasp por ICSP)
 src/main.cpp              Parámetros de usuario y cableado de objetos
-lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
-  Config.h                Configuración agrupada por responsabilidad
+lib/AtlasCore/src/        Lógica independiente del hardware (robot + simulador)
+  rondas/                 Velocidades y selección de primera, segunda y tercera ronda
+    PrimeraRonda.h        Crucero PWM 60, turbina 235 y perfil Seguro
+    SegundaRonda.h        Máximo motor 255, curva 255 y turbina 235
+    TerceraRonda.h        Máximo motor 255, curva 255 y turbina 235 (independientes)
+    RoundControl.h        Selección de ronda y modo según mapa disponible
+    RoundSequence.cpp     Guardado/corrección del mapa y registro de carreras
+  turbina/                Rampas de preparación/carrera y coordinación con READY
+  arrancador/             PROGRAM/READY, START/GO, arranque, frenado y paro
+  parametros/             Config.h, Profiles.h, FirmwareConfig.h y parámetros comunes
   Hal.h                   Interfaces: IClock, ILineSensorBus, IMotor, IDrivetrain, IOperatorInput, IIndicators
   LineSensorArray         Lectura, calibración y posición de la línea (con seguimiento en cruces)
   PdController            Control proporcional-derivativo saturado
@@ -142,16 +150,27 @@ lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
   TrackMap, SpeedPlanner  Mapa aprendido y velocidad por tramo con anticipación
   CalibrationStore, TrackMapStore  Calibración y mapa en EEPROM
   RunLog, LogExporter     Registro de las últimas carreras (dónde se salió) para el analizador
-  Profiles                Perfiles Seguro (reconocimiento) y Rápido (con mapa)
   AtlasApp                Máquina de estados del manual (color → calibración → velocidad → READY → GO → fin)
   StatusLeds, Ramp        Utilidades
 lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
 CMakeLists.txt            Simulador, pruebas y targets firmware/upload
 simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         75 pruebas unitarias y de integración
+simulation/tests/         Pruebas unitarias y de integración
 simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
 simulation/viewer/        Plantilla del visor HTML animado
 ```
+
+Para cambiar velocidades, edita el archivo de la ronda correspondiente en
+`rondas/`. La primera usa crucero PWM 60 (ajustable con SW1/SW2 y guardado en
+EEPROM). La segunda y la tercera usan el mapa: sus valores de motor son
+**límites**, y el planificador reduce la velocidad según curvas, confianza y
+correcciones aprendidas. Las tres mantienen un impulso inicial PWM 60.
+
+Sin mapa válido se repite reconocimiento. Con mapa se usa la segunda ronda;
+después del primer intento guiado se usa la tercera, también en intentos
+posteriores. Recalibrar reinicia esta secuencia y borra el mapa. Al apagar no se
+guarda el número de ronda: si se carga un mapa válido, se retoma la segunda.
+Si una carrera guiada falla, se conserva la corrección automática del mapa.
 
 Principios aplicados: inversión de dependencias (el núcleo solo conoce interfaces), responsabilidad única por clase, configuración inyectada, sin estado global en el núcleo, funciones cortas con nombres descriptivos.
 
@@ -268,7 +287,7 @@ El simulador mide la oscilación como **cruces de un lado a otro de la línea po
 | Original | 0.05 | 0.35 | — | 1.79 | 46 PWM | 13.2 mm |
 | Rama de oscilación | 0.05 | 1.2 | 1/4 | 0.81 | 44 PWM | 13.2 mm |
 
-Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
+Si en el robot real todavía oscila, en `lib/AtlasCore/src/parametros/Config.h` y `Profiles.h`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
 
 ## Limitaciones conocidas
 
@@ -280,7 +299,7 @@ Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2,
 
 `atlas_sim --firmware --out DIR` ejecuta tres intentos en cada pista con los
 ajustes compartidos con `src/main.cpp` en `FirmwareConfig.h`: reconocimiento
-PWM 170, turbina 190; perfil Rápido con mapa y turbina 235. Añadir `--sin-red`
+PWM 60, turbina 235; perfil Rápido con mapa y turbina 235. Añadir `--sin-red`
 permite comparar ambas redes apagadas con las mismas semillas. `--track 0`
 limita la ejecución a la pista de competencia. Los dos modos de esa pista
 forman parte de CTest. Los rizos menores que la distancia barra-eje siguen
@@ -290,3 +309,7 @@ El banco general conserva su barrido histórico (130/160/190/220/250), turbina
 200 y aprendizaje a 100 con turbina 215. Ese barrido no representa por sí solo
 los ajustes de despliegue. Las simulaciones no sustituyen pruebas en hardware;
 una velocidad guardada en EEPROM también puede cambiar el arranque real.
+
+Con el arranque a PWM 60, el reconocimiento en la pista de competencia supera
+el límite de 40 s de CTest; los intentos con mapa completan la pista en unos
+11 s. Se conserva el mínimo solicitado sin modificar el criterio de aprobación.

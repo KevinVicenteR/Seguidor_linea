@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 
-#include "Config.h"
+#include "parametros/Config.h"
 
 namespace atlas {
 

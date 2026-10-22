@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "Config.h"
+#include "parametros/Config.h"
 #include "Geometry.h"
 
 namespace sim {
@@ -18,6 +18,7 @@ struct ScenarioSpec {
   atlas::LineColor lineColor = atlas::LineColor::Black;  // línea negra sobre fondo blanco
   int16_t impellerPwm = 200;
   int16_t fastImpellerPwm = -1;  // turbina en intentos con mapa (-1: igual que impellerPwm)
+  int16_t thirdImpellerPwm = -1; // tercera ronda (-1: igual que segunda)
   double sensorNoiseSigma = 4.0;
   uint32_t seed = 1;
   bool required = true;  // si falla, la simulación termina con error
