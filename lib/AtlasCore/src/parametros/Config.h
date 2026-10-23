@@ -124,12 +124,15 @@ struct LostLineConfig {
   // Huecos en la línea: si se pierde la línea después de ir recto y centrado
   // (en una recta), el robot sigue recto hasta gapBridgeMs antes de buscarla
   // girando. En curvas, rizos y picos la línea nunca está centrada tanto tiempo.
-  uint16_t gapBridgeMs = 200;
+  uint16_t gapBridgeMs = 300;
   int16_t gapCenterTolerance = 1500;  // |error| máximo para considerarse "centrado"
   uint16_t gapStraightMs = 25;        // tiempo centrado exigido antes del hueco
   // Punteado: si acaba de cruzar un hueco en recto, el siguiente trozo de
   // cinta cuenta como recto desde que aparece (huecos encadenados).
-  uint16_t gapChainMs = 300;
+  uint16_t gapChainMs = 600;
+  // Al salir de un hueco se admite una pequeña desviación lateral antes del
+  // siguiente; los extremos y las ramas siguen cancelando la recta.
+  int16_t gapChainCenterTolerance = 2500;
 };
 
 // Frenado anticipado en esquinas: la barra (18 cm delante del eje) detecta la

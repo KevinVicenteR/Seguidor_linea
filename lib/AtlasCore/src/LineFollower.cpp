@@ -127,6 +127,7 @@ void LineFollower::update(uint32_t nowMs) {
     command_ = bridgeGap(guidedVelocity(velocity));
   } else {
     bridging_ = false;
+    bridgedOnce_ = false;
     if (!recovering_) governor_.penalize(config_->adaptive.speedDropOnLoss, nowMs);
     recovering_ = true;
     command_ = recoverLine(nowMs);
@@ -402,19 +403,22 @@ int16_t LineFollower::slowDownForCurve(int16_t velocity, int32_t error) const {
 
 void LineFollower::trackStraightRun(int32_t error, uint32_t nowMs) {
   const LostLineConfig& lost = config_->lostLine;
-  const bool centered = looksStraight(error);
+  const bool chainedGap = bridgedOnce_ && nowMs - lastBridgeMs_ <= lost.gapChainMs;
+  const bool centered = looksStraight(error, chainedGap ? lost.gapChainCenterTolerance : lost.gapCenterTolerance);
+  // Una curva o rama termina la cadena: volver al centro después exige
+  // otra recta estable antes de considerar la pérdida como hueco.
+  if (!centered) bridgedOnce_ = false;
   if (centered && !centered_) {
     // Trozo de punteado: viene de cruzar un hueco en recto, ya cuenta como recta.
-    const bool chainedGap = bridgedOnce_ && nowMs - lastBridgeMs_ <= lost.gapChainMs;
     centeredSinceMs_ = chainedGap ? nowMs - lost.gapStraightMs : nowMs;
   }
   centered_ = centered;
 }
 
 // Línea limpia y centrada: sin cruce/esquina, sin extremos y sin otras ramas.
-bool LineFollower::looksStraight(int32_t error) const {
+bool LineFollower::looksStraight(int32_t error, int16_t tolerance) const {
   const int32_t magnitude = error < 0 ? -error : error;
-  return magnitude <= config_->lostLine.gapCenterTolerance && !reading_.ambiguous && !reading_.leftEdgeDetected &&
+  return magnitude <= tolerance && !reading_.ambiguous && !reading_.leftEdgeDetected &&
          !reading_.rightEdgeDetected && !reading_.otherLineLeft && !reading_.otherLineRight;
 }
 

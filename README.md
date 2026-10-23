@@ -253,7 +253,8 @@ Pasa saliendo desde el INICIO y saliendo desde un hueco, y no falla en 40 corrid
 5. **Frenado en curva** — la velocidad base baja hasta un 40 % en proporción al error (`curveSlowdownPercent`; 0 = original). En el barrido de 440 corridas redujo las fallas de 6 a 3 con un costo de tiempo menor a 1 %.
 6. **Solo línea negra sobre fondo blanco** — cualquier botón inicia la calibración (`config.sensors.lineColor`).
 7. **Indicación de calibración** — al terminar se verifica que los 16 sensores hayan visto línea y fondo (`minCalibrationSpan`, `requiredCalibratedSensors`): LED0 + LED1 fijos si es válida, LED2 rápido y repetir si no.
-8. **Huecos en la línea** — si la línea desaparece justo después de un tramo recto y centrado (≥ 60 ms), el robot sigue recto hasta 200 ms antes de buscarla girando (`gapBridgeMs`, `gapStraightMs`). También permite arrancar sobre un hueco.
+8. **Huecos en la línea** — si la línea desaparece justo después de un tramo recto y centrado (≥ 25 ms), el robot sigue recto hasta 300 ms antes de buscarla girando (`gapBridgeMs`, `gapStraightMs`). También permite arrancar sobre un hueco.
+   Entre huecos consecutivos admite una pequeña desviación de la línea (`gapChainCenterTolerance`) sin exigir otra recta de 25 ms. Una rama, un borde o una desviación mayor cancela esa continuidad.
 9. **Varias carreras por calibración** — quitar GO regresa al estado listo en lugar de quedarse en espera hasta RESET; SW1 + SW2 juntos recalibran.
 10. **Picos agudos** — se recuerda de qué lado apareció otra rama de línea; al terminarse la línea en el pico el robot gira hacia esa rama.
 11. El impeller sigue su rampa aunque el robot esté fuera de la línea (antes conservaba el último valor).

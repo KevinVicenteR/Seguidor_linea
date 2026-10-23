@@ -91,7 +91,7 @@ class LineFollower {
   MotorCommand bridgeGap(int16_t velocity) const;
   void rememberLastSide();
   void trackStraightRun(int32_t error, uint32_t nowMs);
-  bool looksStraight(int32_t error) const;
+  bool looksStraight(int32_t error, int16_t tolerance) const;
   int16_t clampWheel(int16_t pwm) const;
   void apply(const MotorCommand& command);
   int16_t compensateDeadband(int16_t pwm) const;

@@ -4,7 +4,7 @@
 
 namespace atlas {
 constexpr int16_t kPrimeraRondaMotorPwm = 60;
-constexpr int16_t kPrimeraRondaTurbinaPwm = 235;
+constexpr int16_t kPrimeraRondaTurbinaPwm = 255;
 
 constexpr RobotConfig primeraRondaConfig(bool neural = kUseNeuralNetwork) {
   RobotConfig config = firmwareConfig(safeProfile(), neural);

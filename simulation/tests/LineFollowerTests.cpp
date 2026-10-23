@@ -171,6 +171,45 @@ TEST("Hueco más largo que gapBridgeMs: empieza a buscar la línea") {
   EXPECT_TRUE(rig.drivetrain.leftMotor.pwm != rig.drivetrain.rightMotor.pwm);
 }
 
+TEST("Segundo hueco: una línea algo descentrada entre huecos sigue contando como recta") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);
+  rig.bus.fill(220);
+  rig.follower.update(1140);
+  rig.bus.lineAt(9, 10);  // error 2000: pequeña desviación al salir del primer hueco
+  rig.follower.update(1141);
+  rig.follower.update(1150);
+  rig.bus.fill(220);
+  rig.follower.update(1151);
+  EXPECT_TRUE(rig.follower.isBridging());
+  EXPECT_FALSE(rig.follower.isRecovering());
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.drivetrain.rightMotor.pwm);
+  rig.follower.update(1150 + rig.config.lostLine.gapBridgeMs);
+  EXPECT_TRUE(rig.follower.isBridging());
+  rig.follower.update(1150 + rig.config.lostLine.gapBridgeMs + 1);
+  EXPECT_TRUE(rig.follower.isRecovering());
+}
+
+TEST("Tras un hueco, una rama de esquina cancela la continuación en recto") {
+  Rig rig;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  for (uint32_t t = 1000; t <= 1100; t++) rig.follower.update(t);
+  rig.bus.fill(220);
+  rig.follower.update(1140);
+  rig.bus.lineAt(7, 8);
+  rig.bus.values[14] = rig.bus.values[15] = 30;
+  rig.follower.update(1141);
+  rig.bus.lineAt(7, 8);
+  rig.follower.update(1142);
+  rig.bus.fill(220);
+  rig.follower.update(1143);
+  EXPECT_FALSE(rig.follower.isBridging());
+  EXPECT_TRUE(rig.follower.isRecovering());
+}
+
 TEST("Línea perdida en curva (no centrada): no se trata como hueco") {
   Rig rig;
   rig.follower.start(150, 0);
