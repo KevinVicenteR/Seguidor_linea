@@ -1660,6 +1660,9 @@ window.ATLAS_DATOS = {
     "planner.maxPwm": 225.0,
     "planner.fullTurnPwm": 140.0
   },
-  "visor": true,
-  "avisos": []
+  "visor": false,
+  "avisos": [
+    "Falta resultados_simulacion/firmware/resumen.csv. Para generarlo: ./build/simulacion/atlas_sim --firmware --out resultados_simulacion/firmware",
+    "Falta resultados_simulacion/firmware_sin_red/resumen.csv. Para generarlo: ./build/simulacion/atlas_sim --firmware --sin-red --out resultados_simulacion/firmware_sin_red"
+  ]
 };
