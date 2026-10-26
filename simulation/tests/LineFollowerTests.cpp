@@ -122,6 +122,23 @@ TEST("El impeller sube en rampa durante la carrera") {
   EXPECT_EQ(rig.drivetrain.impellerMotor.pwm, rig.config.impeller.pwm);
 }
 
+TEST("El limitador de aceleración frena la subida de velocidad, no la bajada") {
+  Rig rig;
+  rig.config.speed.maxAccelPwmPerS = 400;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  rig.follower.update(0);
+  rig.follower.update(100);  // la rampa pide 100, el límite deja 400 PWM/s · 0.1 s
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 40);
+  rig.follower.update(105);  // 5 ms más: +2 PWM
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 42);
+  rig.follower.update(1000);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 150);
+  rig.follower.requestStop(1000);
+  rig.follower.update(1250);  // la rampa de paro baja a la mitad sin esperar
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 75);
+}
+
 TEST("Frenado en curva: con la línea lejos del centro baja la velocidad base") {
   Rig rig;
   rig.config.control.curveSlowdownPercent = 40;

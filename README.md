@@ -6,6 +6,10 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 >
 > Modo único: **línea negra sobre fondo blanco**.
 
+> **Rama `feature/red-angulo-sin-turbina`:** el robot corre **sin turbina** (`impeller.pwm = 0`). Sin succión el agarre lateral es solo ~1 g, así que en `FirmwareConfig.h` se bajó la velocidad de reconocimiento a **PWM 130**, la rueda exterior al buscar la línea a 110, la velocidad en esquinas al 50 % y el perfil Rápido a rectas 225 / giro cerrado 140. En simulación (11 pistas obligatorias × robots nominal, moderado y real × 8 semillas × 3 intentos): **0 fallas en 792 carreras**, reconocimiento ~16.3 s y vueltas con mapa ~14.2 s de media. Con los ajustes de la rama con turbina, sin ella fallaban 48 de 297. Las secciones de turbina de abajo describen la otra rama.
+>
+> **Caballito con llantas de mucho agarre:** sin turbina, acelerar de golpe levanta el frente. `speed.maxAccelPwmPerS = 400` limita solo la subida de la velocidad base (de 0 a 130 en ~0.33 s); frenar y girar no cambian, y se quitó el impulso de arranque (`startKickMs = 0`). En simulación cuesta ~0.1 s por vuelta y sigue con 0 fallas en 792 carreras. Si aún levanta el frente, baja ese valor (250 ≈ +0.4 s por vuelta).
+
 ## Uso en competencia (3 intentos)
 
 1. **Encender:** conecta el impeller a la salida 2S y luego la batería. El LED2 parpadea al iniciar (mantén SW1/SW2 en ese momento solo si quieres el modo diagnóstico).

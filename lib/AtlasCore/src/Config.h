@@ -113,6 +113,10 @@ struct SpeedConfig {
   // necesita más fuerza para empezar a moverse.
   int16_t startKickPwm = 100;
   uint16_t startKickMs = 200;
+  // Aceleración máxima de la velocidad base (PWM por segundo; 0 = sin límite).
+  // Sin turbina y con llantas de mucho agarre, acelerar de golpe levanta el
+  // frente (caballito). Solo limita la subida: frenar y girar no cambian.
+  uint16_t maxAccelPwmPerS = 0;
 };
 
 struct ImpellerConfig {

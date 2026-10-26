@@ -94,6 +94,7 @@ class LineFollower {
   void apply(const MotorCommand& command);
   int16_t compensateDeadband(int16_t pwm) const;
   int16_t guidedVelocity(int16_t velocity) const;
+  int16_t limitAcceleration(int16_t target, uint32_t nowMs);
   // Red de control: porcentaje de kp y kd para esta lectura.
 #ifndef ATLAS_NO_HIERARCHY
   void neuralGains(int32_t error, int16_t velocity, uint32_t nowMs, uint8_t* kpPercent, uint8_t* kdPercent);
@@ -137,6 +138,8 @@ class LineFollower {
   LinearRamp brakeRamp_;
 
   uint32_t startMs_ = 0;
+  int16_t limitedBase_ = 0;  // velocidad base tras el limitador de aceleración
+  uint32_t limitedAtMs_ = 0;
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;

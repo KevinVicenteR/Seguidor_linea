@@ -57,6 +57,8 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
 
   // Impulso de arranque y después rampa hacia la velocidad crucero.
   startMs_ = nowMs;
+  limitedBase_ = 0;
+  limitedAtMs_ = nowMs;
   const SpeedConfig& speed = config_->speed;
   velocityRamp_.start(nowMs + speed.startKickMs, speed.runRampMs, speed.startKickPwm, cruisePwm);
   impellerRamp_.start(nowMs, config_->impeller.runRampMs, 0, config_->impeller.pwm);
@@ -123,12 +125,15 @@ void LineFollower::update(uint32_t nowMs) {
   } else if (isCrossingGap(nowMs)) {
     if (!bridging_) onGapEntered();
     bridging_ = true;
-    command_ = bridgeGap(guidedVelocity(velocity));
+    command_ = bridgeGap(limitAcceleration(guidedVelocity(velocity), nowMs));
   } else {
     bridging_ = false;
     if (!recovering_) governor_.penalize(config_->adaptive.speedDropOnLoss, nowMs);
     recovering_ = true;
     command_ = recoverLine(nowMs);
+    // Buscando la línea el robot avanza a lo más con la rueda exterior.
+    if (limitedBase_ > config_->lostLine.outerMotorPwm) limitedBase_ = config_->lostLine.outerMotorPwm;
+    limitedAtMs_ = nowMs;
   }
   command_.left = clampWheel(command_.left);
   command_.right = clampWheel(command_.right);
@@ -245,6 +250,28 @@ void LineFollower::scaleCrossingHoldToSpeed(int16_t velocity) {
   sensors_.setHeldReadsLimit(static_cast<uint16_t>(reads > 2000 ? 2000 : reads));
 }
 
+// La velocidad base sube como mucho maxAccelPwmPerS; baja sin restricción.
+int16_t LineFollower::limitAcceleration(int16_t target, uint32_t nowMs) {
+  const uint16_t accel = config_->speed.maxAccelPwmPerS;
+  const uint32_t elapsedMs = nowMs - limitedAtMs_;
+  if (accel == 0 || target <= limitedBase_) {
+    limitedBase_ = target;
+    limitedAtMs_ = nowMs;
+    return target;
+  }
+  const int32_t step = static_cast<int32_t>(accel) * elapsedMs / 1000;
+  if (step == 0) return limitedBase_;  // espera a acumular al menos 1 PWM
+  const int32_t raised = limitedBase_ + step;
+  if (raised >= target) {
+    limitedBase_ = target;
+    limitedAtMs_ = nowMs;
+  } else {
+    limitedBase_ = static_cast<int16_t>(raised);
+    limitedAtMs_ += static_cast<uint32_t>(step) * 1000 / accel;  // conserva el sobrante
+  }
+  return limitedBase_;
+}
+
 int16_t LineFollower::currentVelocity(uint32_t nowMs) const {
   if (stopping_) return brakeRamp_.valueAt(nowMs);
   if (nowMs - startMs_ < config_->speed.startKickMs) return config_->speed.startKickPwm;
@@ -287,7 +314,7 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   }
   predictor_.remember(correction);
   lastError_ = error;
-  const int16_t base = slowDownForCurve(scaleForCorner(velocity, nowMs), error);
+  const int16_t base = limitAcceleration(slowDownForCurve(scaleForCorner(velocity, nowMs), error), nowMs);
 
   MotorCommand command;
   command.left = base + correction;

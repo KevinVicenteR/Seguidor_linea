@@ -187,10 +187,10 @@ TEST("Ajustes de despliegue conservan velocidades y activan las redes entrenadas
   for (bool neural : {false, true}) {
     const auto safe = firmwareSafeConfig(neural);
     const auto fast = firmwareFastConfig(neural);
-    EXPECT_EQ(safe.speed.basePwm, 170);
-    EXPECT_EQ(safe.impeller.pwm, 190);
-    EXPECT_EQ(fast.speed.basePwm, 170);
-    EXPECT_EQ(fast.impeller.pwm, 235);
+    EXPECT_EQ(safe.speed.basePwm, 130);
+    EXPECT_EQ(safe.impeller.pwm, 0);  // rama sin turbina
+    EXPECT_EQ(fast.speed.basePwm, 130);
+    EXPECT_EQ(fast.impeller.pwm, 0);
     EXPECT_EQ(safe.sensors.neuralPosition, neural);
     EXPECT_FALSE(safe.control.neuralGains);  // la red jerárquica quedó neutra: apagada
     EXPECT_EQ(safe.control.neuralDerivative, neural && neural::kDerivativeTrained && kDeployedDerivativeBlend > 0);
