@@ -32,7 +32,7 @@ Refactorización orientada a objetos del firmware ATLAS 1.4.3 (EXOTIC TEAM MX) p
 
 - Cuando un intento con mapa se sale, el robot anota el **tramo** donde perdió la línea y, sin que hagas nada, marca esa zona (≈1 m antes) como curva más cerrada y hace un 10 % más lentas todas las curvas (las rectas no cambian). El siguiente intento frena ahí. Si vuelve a salirse, corrige de nuevo.
 - También cuenta como salida quitar GO mientras el robot buscaba la línea, o una vuelta con mapa que no llegó al 95 % del recorrido.
-- Para **verlo**: conecta el USB-TTL, entra al modo diagnóstico (mantén SW1 al encender), elige **[4] REGISTRO** y copia el texto desde `ATLAS-REGISTRO` hasta `FIN`. Pégalo en `simulation_output/analizador.html`: dibuja tu pista con el mapa aprendido, los huecos detectados y una ✕ donde se salió cada intento, más la tabla de tiempos. El registro guarda las últimas 8 carreras (SW2 lo borra desde ese menú).
+- Para **verlo**: conecta el USB-TTL, entra al modo diagnóstico (mantén SW1 al encender), elige **[4] REGISTRO** y copia el texto desde `ATLAS-REGISTRO` hasta `FIN`. Pégalo en `resultados_simulacion/analizador.html`: dibuja tu pista con el mapa aprendido, los huecos detectados y una ✕ donde se salió cada intento, más la tabla de tiempos. El registro guarda las últimas 8 carreras (SW2 lo borra desde ese menú).
 
 **Cómo reiniciar:**
 
@@ -78,12 +78,12 @@ El robot mide en el reconocimiento cuánto tiempo pasó buscando la línea; si s
 
 ## Red neuronal (rama `neouronal`)
 
-**Interruptor:** `kUseNeuralNetwork` en `src/main.cpp` (`true` = red activa; `false` = control clásico de antes). En el simulador: `atlas_sim --sin-red` para comparar.
+**Interruptor:** `kUseNeuralNetwork` en `firmware/programa/main.cpp` (`true` = red activa; `false` = control clásico de antes). En el simulador: `atlas_sim --sin-red` para comparar.
 
 ### Fase 1: posición fina de la línea
 - **Qué hace:** una red pequeña (7 entradas → 8 neuronas ReLU → 1 salida, 76 pesos y sesgos en la flash) lee los 7 sensores alrededor de la línea **sin el umbral del 50 %**. Así también ve los sensores apenas cubiertos, que el promedio ponderado descarta, y calcula la posición con más precisión. Solo reemplaza la posición; los cruces, picos, huecos y bordes siguen con la lógica de siempre. En los extremos de la barra y en grupos anchos usa el promedio ponderado, y su resultado nunca se aleja más de ±300 (±2.7 mm) de él.
 - **En el AVR:** aritmética entera (pesos int8/int16, `MULS` nativo), ~150 µs por lectura; firmware al 92 % de flash y 77 % de RAM.
-- **Entrenamiento:** `atlas_train_nn posicion` corre el firmware en todas las pistas con 3 modelos de robot, 3 velocidades y sensores variados (tamaño del punto de lectura, ganancia, contraste, ruido, luz). La etiqueta es el cruce verdadero de la línea con la barra, que el simulador conoce. Luego cuantiza a enteros y escribe `lib/AtlasCore/src/NeuralPositionWeights.h`.
+- **Entrenamiento:** `atlas_train_nn posicion` corre el firmware en todas las pistas con 3 modelos de robot, 3 velocidades y sensores variados (tamaño del punto de lectura, ganancia, contraste, ruido, luz). La etiqueta es el cruce verdadero de la línea con la barra, que el simulador conoce. Luego cuantiza a enteros y escribe `firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralPositionWeights.h`.
 - **Precisión (corridas de validación no usadas al entrenar):** error de posición de **1.3 mm → 0.53 mm (−60 %)**; la versión en enteros es igual de precisa que la de `double`.
 
 | Todas las pistas (3 modelos × 10 semillas × 3 intentos, turbina 200) | Fallos |
@@ -96,7 +96,7 @@ En tus pistas (práctica y competencia, configuración de `main.cpp`): 0 fallos 
 
 ### Fase 2: control (ajuste de ganancias en marcha)
 - **Qué hace:** una segunda red (6 entradas → 8 ReLU → 2 salidas) decide en cada lectura qué **porcentaje de kp y de kd** usar, entre **70 % y 130 %**. Sus entradas son el error, cuánto cambia, si se aleja o se acerca a la línea, la velocidad, la curva que viene según el mapa y la auto-amortiguación. **kp y kd no cambian** (siguen en `Config.h` / `Profiles.cpp`); la red solo los multiplica dentro de ese rango.
-- **Entrenamiento:** `atlas_train_nn control` usa evolución (estrategia evolutiva con muestreo antitético). Cada candidato corre los 3 intentos en las pistas de competencia, práctica, Gran Premio y Hexágono, con 3 modelos de robot y la configuración de `main.cpp`. Premia el tiempo, el error p95 y el zigzag, y castiga cada salida de pista. Escribe `lib/AtlasCore/src/NeuralGainWeights.h`.
+- **Entrenamiento:** `atlas_train_nn control` usa evolución (estrategia evolutiva con muestreo antitético). Cada candidato corre los 3 intentos en las pistas de competencia, práctica, Gran Premio y Hexágono, con 3 modelos de robot y la configuración de `main.cpp`. Premia el tiempo, el error p95 y el zigzag, y castiga cada salida de pista. Escribe `firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralGainWeights.h`.
 - **Validación (99 competencias con semillas nuevas, todas las pistas):** zigzag 1.60 → **1.32/m (−17 %)**, error p95 38 → 37 mm, tiempo medio 11.87 → 11.72 s, 0 salidas.
 
 | Robot "real", con las dos redes | Sin red | Con redes |
@@ -132,29 +132,36 @@ Soluciones en el firmware: **auto-amortiguación** (`OscillationGuard`: baja Kp 
 
 ## Estructura
 
-```
-platformio.ini            Firmware (botón "Upload" de PlatformIO, USBasp por ICSP)
-src/main.cpp              Parámetros de usuario y cableado de objetos
-lib/AtlasCore/            Lógica independiente del hardware (robot + simulador)
-  Config.h                Configuración agrupada por responsabilidad
-  Hal.h                   Interfaces: IClock, ILineSensorBus, IMotor, IDrivetrain, IOperatorInput, IIndicators
-  LineSensorArray         Lectura, calibración y posición de la línea (con seguimiento en cruces)
-  PdController            Control proporcional-derivativo saturado
-  LineFollower            Carrera: rampas, PD, recuperación de línea, huecos, frenado, modos de mapa
-  OscillationGuard        Auto-amortiguación (reduce ganancias si hay zigzag)
-  SpeedGovernor           Baja la velocidad al perder la línea, la recupera al ir limpio
-  TrackMap, SpeedPlanner  Mapa aprendido y velocidad por tramo con anticipación
-  CalibrationStore, TrackMapStore  Calibración y mapa en EEPROM
-  RunLog, LogExporter     Registro de las últimas carreras (dónde se salió) para el analizador
-  Profiles                Perfiles Seguro (reconocimiento) y Rápido (con mapa)
-  AtlasApp                Máquina de estados del manual (color → calibración → velocidad → READY → GO → fin)
-  StatusLeds, Ramp        Utilidades
-lib/AtlasAvr/             Implementación AVR (registros, timers, ADC, EEPROM, diagnóstico serial)
-CMakeLists.txt            Simulador, pruebas y targets firmware/upload
-simulation/sim/           Física, pistas, hardware simulado, operador virtual, árbitro, reporte
-simulation/tests/         75 pruebas unitarias y de integración
-simulation/tools/         atlas_tune (perfiles), atlas_tune_learning (planificador), atlas_extremes
-simulation/viewer/        Plantilla del visor HTML animado
+```text
+platformio.ini                         Compilación y carga del firmware AVR
+firmware/
+  programa/main.cpp                    Parámetros de usuario y cableado de objetos
+  bibliotecas/
+    AtlasAvr/src/                      Hardware AVR y diagnóstico serial
+    AtlasCore/src/
+      app/                             Aplicación, interfaces y utilidades
+      configuracion/                   Configuración y perfiles
+      sensores/                        Lectura, calibración y posición de línea
+      control/                         Seguimiento, PD, rampas y adaptación
+      planificador/                    Mapa aprendido y velocidad por tramo
+      memoria/                         Persistencia en EEPROM
+      registro/                        Registro y exportación de carreras
+      red_neuronal/                    Redes y pesos del firmware
+simulacion/
+  motor/                               Física, pistas, hardware simulado y reportes
+  visor/                               Plantillas HTML del visor y analizador
+  pruebas/                             87 pruebas unitarias y de integración
+  CMakeLists.txt                       Targets del simulador y herramientas
+entrenamiento/
+  algoritmos/                          Entrenamiento de redes neuronales
+  ajuste/                              Optimización de parámetros y modelo del robot
+  resultados/                          Informes y registros de entrenamiento
+  README.md                            Uso de los algoritmos y ajustes
+diagnostico/                           Banco de casos extremos y captura serial
+  README.md                            Uso de herramientas y menú diagnóstico [0]–[4]
+docs/                                  Fuentes y recomendaciones de hardware
+dashboard/                             Reservado para el panel (.gitkeep)
+CMakeLists.txt                         Núcleo compartido y targets firmware/upload
 ```
 
 Principios aplicados: inversión de dependencias (el núcleo solo conoce interfaces), responsabilidad única por clase, configuración inyectada, sin estado global en el núcleo, funciones cortas con nombres descriptivos.
@@ -183,7 +190,7 @@ ctest --test-dir build --output-on-failure
 cmake --build build --target simulate
 ```
 
-`simulate` corre los 52 escenarios en paralelo y genera `simulation_output/index.html`: un visor con la animación del robot sobre cada pista (reproducir, pausa, velocidad 0.25×–8×, línea de tiempo, cámara que sigue al robot), la gráfica de velocidad con las zonas donde se perdió la línea, métricas y una matriz de resultados. También genera `resumen.csv`. Si CMake encuentra PlatformIO, existen también los targets `firmware` y `upload`.
+`simulate` corre los 52 escenarios en paralelo y genera `resultados_simulacion/index.html`: un visor con la animación del robot sobre cada pista (reproducir, pausa, velocidad 0.25×–8×, línea de tiempo, cámara que sigue al robot), la gráfica de velocidad con las zonas donde se perdió la línea, métricas y una matriz de resultados. También genera `resumen.csv`. Si CMake encuentra PlatformIO, existen también los targets `firmware` y `upload`.
 
 ### Qué se simula
 
@@ -210,7 +217,7 @@ cmake --build build --target simulate
 | Trébol de lazos | 18.8 m | Cuatro lazos de 11 cm de radio con cruce |
 | Gran Premio | 35.5 m | Rizo, chicana, escalón, cruce, horquillas y curvas rápidas |
 
-Las pistas se construyen con `FilletedLoopBuilder` (polígono + radio por vértice + figura por lado) o curvas paramétricas; agregar una nueva es una función en `simulation/sim/TrackLibrary.cpp`.
+Las pistas se construyen con `FilletedLoopBuilder` (polígono + radio por vértice + figura por lado) o curvas paramétricas; agregar una nueva es una función en `simulacion/motor/TrackLibrary.cpp`.
 
 ### Pista de competencia
 
@@ -261,7 +268,7 @@ Validación con 1 536 corridas que el optimizador no vio (12 pistas × PWM 100�
 - **Las 3 fallas** son en rizos con radio menor que el límite geométrico del robot (la barra está 18 cm delante del eje, así que no puede seguir de forma estable curvas de menos de ~18 cm): 2 en el Trébol (lazos de 11 cm, ahora prueba no obligatoria) y 1 en el triángulo de rizos, todas a PWM 100–110.
 - **Límite físico:** en esquinas vivas y picos la barra siempre se sale unos centímetros, por eso el p95 de la pista de competencia queda en ~30 mm; en tramos suaves la precisión es de 3–5 mm.
 
-Para volver a optimizar con otros pesos o pistas: `./build/simulation/atlas_tune [aleatorias] [refinamientos] [semilla]`.
+Para volver a optimizar con otros pesos o pistas: `./build/simulacion/atlas_tune [aleatorias] [refinamientos] [semilla]`.
 
 ## Oscilación
 
@@ -272,7 +279,7 @@ El simulador mide la oscilación como **cruces de un lado a otro de la línea po
 | Original | 0.05 | 0.35 | — | 1.79 | 46 PWM | 13.2 mm |
 | Rama de oscilación | 0.05 | 1.2 | 1/4 | 0.81 | 44 PWM | 13.2 mm |
 
-Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
+Si en el robot real todavía oscila, en `firmware/programa/main.cpp`: sube `kd` de 0.2 en 0.2, o baja `kp` de 0.005 en 0.005; si vibra rápido (zumbido), sube `derivativeFilterShift` a 3. Cambia un parámetro a la vez y vuelve a cargar.
 
 ## Limitaciones conocidas
 
@@ -283,7 +290,7 @@ Si en el robot real todavía oscila, en `src/main.cpp`: sube `kd` de 0.2 en 0.2,
 ### Validar los ajustes de despliegue
 
 `atlas_sim --firmware --out DIR` ejecuta tres intentos en cada pista con los
-ajustes compartidos con `src/main.cpp` en `FirmwareConfig.h`: reconocimiento
+ajustes compartidos con `firmware/programa/main.cpp` en `FirmwareConfig.h`: reconocimiento
 PWM 170, turbina 190; perfil Rápido con mapa y turbina 235. Añadir `--sin-red`
 permite comparar ambas redes apagadas con las mismas semillas. `--track 0`
 limita la ejecución a la pista de competencia. Los dos modos de esa pista
@@ -294,3 +301,15 @@ El banco general conserva su barrido histórico (130/160/190/220/250), turbina
 200 y aprendizaje a 100 con turbina 215. Ese barrido no representa por sí solo
 los ajustes de despliegue. Las simulaciones no sustituyen pruebas en hardware;
 una velocidad guardada en EEPROM también puede cambiar el arranque real.
+
+## Dashboard
+
+Panel del piloto en español, sin internet ni servidor. Desde la raíz, regenera los datos con estos tres comandos:
+
+```bash
+cmake -S . -B build && cmake --build build -j
+./build/simulacion/atlas_sim --firmware --out resultados_simulacion/firmware && ./build/simulacion/atlas_sim --firmware --sin-red --out resultados_simulacion/firmware_sin_red
+python3 dashboard/generar_datos.py
+```
+
+Abre [`dashboard/index.html`](dashboard/index.html) con doble clic y recarga si ya estaba abierto. El panel también lee la curva y la evaluación guardadas en `entrenamiento/resultados/`; no vuelve a entrenar la red.

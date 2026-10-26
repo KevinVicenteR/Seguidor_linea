@@ -9,6 +9,8 @@
 build/
 
 # Resultados generados por el simulador (cmake --build build --target simulate)
-simulation_output/
+resultados_simulacion/
 
 .DS_Store
+
+__pycache__/

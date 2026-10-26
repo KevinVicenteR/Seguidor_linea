@@ -1,0 +1,26 @@
+{
+  "red": {"nombre": "Red de posición", "arquitectura": [7, 8, 1], "activacion": "ReLU", "muestras": 50000,
+          "turbina": false, "mejor_epoca": 205},
+  "error_validacion": [
+    {"metodo": "Promedio ponderado (clásico)", "rms": 145, "max": null},
+    {"metodo": "Red anterior (40 000 lecturas, con turbina)", "rms": 59, "max": 784},
+    {"metodo": "Red nueva (50 000 lecturas, sin turbina)", "rms": 58, "max": 614}
+  ],
+  "lazo_cerrado": {
+    "carreras_por_fila": 792,
+    "descripcion": "11 pistas obligatorias x robots nominal, moderado y real x 8 semillas x 3 intentos",
+    "filas": [
+      {"agarre_pct": 100, "fallas_con_red": 0, "fallas_sin_red": 7, "vuelta_mapa_con_red_s": 14.24, "vuelta_mapa_sin_red_s": 14.23},
+      {"agarre_pct": 90, "fallas_con_red": 5, "fallas_sin_red": 4, "vuelta_mapa_con_red_s": 14.55, "vuelta_mapa_sin_red_s": 14.58},
+      {"agarre_pct": 80, "fallas_con_red": 7, "fallas_sin_red": 9, "vuelta_mapa_con_red_s": 14.93, "vuelta_mapa_sin_red_s": 14.96}
+    ]
+  },
+  "ajuste_sin_turbina": {
+    "antes": {"fallas": 48, "carreras": 297, "nota": "ajustes de la rama con turbina corriendo sin turbina"},
+    "despues": {"fallas": 0, "carreras": 792}
+  },
+  "limitador_aceleracion": [
+    {"pwm_por_s": 0, "vuelta_mapa_s": 14.15}, {"pwm_por_s": 600, "vuelta_mapa_s": 14.15},
+    {"pwm_por_s": 400, "vuelta_mapa_s": 14.24}, {"pwm_por_s": 250, "vuelta_mapa_s": 14.58}
+  ]
+}

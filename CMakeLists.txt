@@ -2,7 +2,7 @@
 #
 #   cmake -S . -B build && cmake --build build -j
 #   ctest --test-dir build --output-on-failure     # pruebas unitarias + simulación rápida
-#   cmake --build build --target simulate          # todas las pistas -> simulation_output/index.html
+#   cmake --build build --target simulate          # todas las pistas -> resultados_simulacion/index.html
 #   cmake --build build --target firmware          # compila con PlatformIO (ATmega328P)
 #   cmake --build build --target upload            # sube con PlatformIO + USBasp
 
@@ -18,18 +18,30 @@ endif()
 enable_testing()
 
 # --- Núcleo de control (el mismo código que corre en el robot) -------------
-file(GLOB ATLAS_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src/*.cpp)
+file(GLOB_RECURSE ATLAS_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/*.cpp)
 add_library(atlas_core STATIC ${ATLAS_CORE_SOURCES})
-target_include_directories(atlas_core PUBLIC ${CMAKE_SOURCE_DIR}/lib/AtlasCore/src)
+set(ATLAS_CORE_INCLUDE_DIRS
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/app
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/configuracion
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/sensores
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/control
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/planificador
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/memoria
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/registro
+  ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/red_neuronal
+)
+target_include_directories(atlas_core PUBLIC ${ATLAS_CORE_INCLUDE_DIRS})
 target_compile_options(atlas_core PRIVATE -Wall -Wextra -Wpedantic)
 
 # El firmware AVR se compila con gnu++14 (platformio.ini): se verifica que el
 # núcleo no use nada más moderno.
 add_library(atlas_core_cxx14_check OBJECT ${ATLAS_CORE_SOURCES})
+target_include_directories(atlas_core_cxx14_check PRIVATE ${ATLAS_CORE_INCLUDE_DIRS})
 set_target_properties(atlas_core_cxx14_check PROPERTIES CXX_STANDARD 14)
 target_compile_options(atlas_core_cxx14_check PRIVATE -Wall -Wextra -Wpedantic)
 
-add_subdirectory(simulation)
+add_subdirectory(simulacion)
 
 # --- Firmware con PlatformIO -----------------------------------------------
 find_program(PLATFORMIO_EXECUTABLE NAMES pio platformio PATHS $ENV{HOME}/.platformio/penv/bin)
