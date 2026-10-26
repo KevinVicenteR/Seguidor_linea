@@ -30,6 +30,7 @@ TEST("LinearRamp con duración cero devuelve el destino") {
 
 TEST("PdController: término proporcional y derivativo") {
   PdController pd(0.05f, 0.35f, 1000);
+  EXPECT_EQ(pd.update(0), 0);
   EXPECT_EQ(pd.update(1000), 50 + 350);
   EXPECT_EQ(pd.update(1000), 50);
   EXPECT_EQ(pd.update(800), 40 - 70);
@@ -41,11 +42,17 @@ TEST("PdController satura la salida") {
   EXPECT_EQ(pd.update(-7500), -300);
 }
 
-TEST("PdController::reset borra la memoria del error") {
+TEST("PdController::reset borra la memoria del error sin tirón del derivativo") {
   PdController pd(0.0f, 1.0f, 1000);
   pd.update(500);
   pd.reset();
-  EXPECT_EQ(pd.update(500), 500);
+  EXPECT_EQ(pd.update(500), 0);
+  EXPECT_EQ(pd.update(700), 200);
+}
+
+TEST("Al arrancar descentrado el PD no da un volantazo") {
+  PdController pd(0.0075f, 0.86f, 1000, 1);
+  EXPECT_EQ(pd.update(2000), 15);
 }
 
 TEST("PdController: el filtro suaviza un pico de ruido en el derivativo") {

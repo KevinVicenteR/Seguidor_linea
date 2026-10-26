@@ -27,6 +27,7 @@ class PdController {
   uint8_t filterShift_;
   int32_t previousError_ = 0;
   int32_t filteredDelta_ = 0;
+  bool primed_ = false;
 };
 
 }

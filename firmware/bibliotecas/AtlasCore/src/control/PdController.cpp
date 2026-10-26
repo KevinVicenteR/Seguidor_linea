@@ -18,6 +18,7 @@ void PdController::configure(float kp, float kd, int16_t outputLimit, uint8_t de
 void PdController::reset() {
   previousError_ = 0;
   filteredDelta_ = 0;
+  primed_ = false;
 }
 
 int16_t PdController::update(int32_t error, uint8_t gainPercent) { return update(error, gainPercent, gainPercent); }
@@ -41,6 +42,10 @@ __attribute__((noinline)) int16_t PdController::combine(int32_t error, int32_t d
 }
 
 void PdController::filterDelta(int32_t error) {
+  if (!primed_) {
+    previousError_ = error;
+    primed_ = true;
+  }
   const int32_t deltaError = error - previousError_;
   previousError_ = error;
   filteredDelta_ += (deltaError - filteredDelta_) / (1L << filterShift_);
