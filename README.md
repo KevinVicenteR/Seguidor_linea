@@ -304,7 +304,15 @@ una velocidad guardada en EEPROM también puede cambiar el arranque real.
 
 ## Dashboard
 
-Panel del piloto en español, sin internet ni servidor. Desde la raíz, regenera los datos con estos tres comandos:
+Panel del piloto en español, sin internet. Todo en un paso (compila, simula con y sin red, regenera los datos, levanta un servidor local y abre el navegador; Ctrl+C lo detiene):
+
+```bash
+dashboard/correr_dashboard.sh
+```
+
+Opciones: `--sin-simular` (usa los resultados existentes), `--sin-servidor` (abre el archivo directamente) y `--puerto N`.
+
+A mano, desde la raíz, son estos tres comandos:
 
 ```bash
 cmake -S . -B build && cmake --build build -j

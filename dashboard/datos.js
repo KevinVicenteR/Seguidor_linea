@@ -1,5 +1,5 @@
 window.ATLAS_DATOS = {
-  "generado": "2026-10-26T04:27:16.945654+00:00",
+  "generado": "2026-10-26T22:29:31.764887+00:00",
   "con_red": [
     {
       "escenario": "Pista de competencia · PWM 130 · firmware · Intento 1 (reconocimiento)",
