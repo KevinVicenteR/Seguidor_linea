@@ -5,6 +5,7 @@
 namespace atlas {
 
 struct NeuralHierarchy;
+struct TinyMlpWeights;
 
 constexpr uint8_t kSensorCount = 16;
 constexpr uint16_t kSensorPositionScale = 1000;
@@ -49,6 +50,10 @@ struct ControlConfig {
   bool latencyCompensation = true;
   uint8_t predictorShift = 7;
   int8_t predictorGain = -5;
+  float ki = 0.0f;
+  int32_t integralLimit = 0;
+  const TinyMlpWeights* residualNet = nullptr;
+  int16_t residualLimit = 0;
 };
 
 struct SpeedConfig {

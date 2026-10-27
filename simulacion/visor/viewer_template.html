@@ -259,7 +259,7 @@ function renderMatrix() {
 
 function renderLearning() {
   const rows = DATA.tracks.map((track, t) => {
-    const attempts = DATA.scenarios.map((s, i) => ({ s, i })).filter(({ s }) => s.track === t && s.label.includes('aprendizaje'));
+    const attempts = DATA.scenarios.map((s, i) => ({ s, i })).filter(({ s }) => s.track === t && /aprendizaje|Intento/.test(s.label));
     return { track, attempts };
   }).filter((row) => row.attempts.length);
   if (!rows.length) return;

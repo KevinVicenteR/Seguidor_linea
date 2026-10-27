@@ -1,0 +1,14 @@
+DAgger: experto MPC (21 correcciones, horizonte 60 ms) -> red residual 8-8-1 (±80 PWM)
+Casos de entrenamiento 132, de evaluación 297 (semillas distintas)
+
+  PD solo (referencia)         fallas   0/891   reconoc.  16.73 s  con mapa  15.18 s  error 26.08 mm  zigzag 0.89/m
+  [+1255716 etiquetas del experto, total 1255716, entrenadas 50000, RMS validación 27.715]
+  DAgger iteración 1          fallas 104/891   reconoc.  17.94 s  con mapa  16.36 s  error 18.95 mm  zigzag 5.03/m
+  [+1323627 etiquetas del experto, total 2579343, entrenadas 50000, RMS validación 35.945]
+  DAgger iteración 2          fallas  27/891   reconoc.  15.59 s  con mapa  14.48 s  error 21.43 mm  zigzag 1.97/m
+  [+1157361 etiquetas del experto, total 3736704, entrenadas 50000, RMS validación 35.859]
+  DAgger iteración 3          fallas   6/891   reconoc.  15.54 s  con mapa  14.63 s  error 21.44 mm  zigzag 2.16/m
+  [+1181378 etiquetas del experto, total 4918082, entrenadas 50000, RMS validación 35.941]
+  DAgger iteración 4          fallas   7/891   reconoc.  15.57 s  con mapa  14.59 s  error 21.30 mm  zigzag 2.28/m
+
+Ninguna iteración superó al PD solo: no se escriben pesos.

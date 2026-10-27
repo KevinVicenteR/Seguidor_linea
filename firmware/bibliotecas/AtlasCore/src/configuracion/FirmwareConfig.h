@@ -15,7 +15,8 @@ constexpr RobotConfig firmwareConfig(RobotConfig config, bool neural = kUseNeura
   config.impeller.pwm = 0;
   config.impeller.spinWithReady = false;
   config.lostLine.outerMotorPwm = 110;
-  config.corner.speedPercent = 50;
+  config.corner.speedPercent = 45;
+  if (neural) config.control.kd *= 1.2f;
   config.planner.brakePwmPerBin = 7;
   useNeuralNetworks(config, neural);
   return config;

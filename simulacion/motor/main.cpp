@@ -159,8 +159,8 @@ std::vector<ScenarioResult> runAll(const std::vector<TrackEntry>& tracks, const 
   std::vector<std::vector<ScenarioResult>> perSpec(specs.size());
   std::atomic<std::size_t> next{0};
   std::atomic<std::size_t> done{0};
-  atlas::RobotConfig safe = firmware ? atlas::firmwareSafeConfig() : atlas::safeProfile();
-  atlas::RobotConfig fast = firmware ? atlas::firmwareFastConfig() : atlas::fastProfile();
+  atlas::RobotConfig safe = firmware ? atlas::firmwareSafeConfig(neuralNetwork) : atlas::safeProfile();
+  atlas::RobotConfig fast = firmware ? atlas::firmwareFastConfig(neuralNetwork) : atlas::fastProfile();
   atlas::useNeuralNetworks(safe, neuralNetwork);
   atlas::useNeuralNetworks(fast, neuralNetwork);
   const ScenarioRunner runner(RobotParams(), SensorModel(), safe, fast);
@@ -211,7 +211,7 @@ int main(int argc, char** argv) {
   printSummary(results);
 
   mkdir(options.outputDir.c_str(), 0755);
-  atlas::RobotConfig firmware = options.firmware ? atlas::firmwareSafeConfig() : atlas::safeProfile();
+  atlas::RobotConfig firmware = options.firmware ? atlas::firmwareSafeConfig(options.neuralNetwork) : atlas::safeProfile();
   atlas::useNeuralNetworks(firmware, options.neuralNetwork);
   const RobotParams robot;
   const ReportContext context{tracks, results, firmware, robot};

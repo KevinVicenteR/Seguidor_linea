@@ -5,7 +5,7 @@
 namespace atlas {
 
 constexpr uint16_t kMaxMapBins = 320;
-constexpr uint8_t kMaxMapGaps = 8;
+constexpr uint8_t kMaxMapGaps = 16;
 
 class TrackMap {
  public:

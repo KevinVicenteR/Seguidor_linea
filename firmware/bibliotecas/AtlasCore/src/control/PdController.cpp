@@ -19,12 +19,16 @@ void PdController::reset() {
   previousError_ = 0;
   filteredDelta_ = 0;
   primed_ = false;
+  integral_ = 0;
 }
 
 int16_t PdController::update(int32_t error, uint8_t gainPercent) { return update(error, gainPercent, gainPercent); }
 
 int16_t PdController::update(int32_t error, uint8_t kpPercent, uint8_t kdPercent) {
   filterDelta(error);
+#ifndef ATLAS_NO_TRAINING_HOOKS
+  integrate(error);
+#endif
   return combine(error, filteredDelta_, kpPercent, kdPercent);
 }
 
@@ -35,9 +39,25 @@ int16_t PdController::updateWithDerivative(int32_t error, int32_t derivative, ui
   return combine(error, blended, kpPercent, kdPercent);
 }
 
+#ifndef ATLAS_NO_TRAINING_HOOKS
+void PdController::integrate(int32_t error) {
+  if (integralLimit_ <= 0) return;
+  const int32_t pd = static_cast<int32_t>(error * kp_ + filteredDelta_ * kd_ + integral_ * ki_);
+  const int32_t saturation = outputLimit_ < 255 ? outputLimit_ : 255;
+  const bool saturated = (pd >= saturation && error > 0) || (pd <= -saturation && error < 0);
+  if (saturated) return;
+  integral_ = clampValue<int32_t>(integral_ + error, -integralLimit_, integralLimit_);
+}
+#endif
+
 __attribute__((noinline)) int16_t PdController::combine(int32_t error, int32_t derivative, uint8_t kpPercent,
                                                         uint8_t kdPercent) const {
+#ifdef ATLAS_NO_TRAINING_HOOKS
   const int32_t output = static_cast<int32_t>((error * kp_ * kpPercent + derivative * kd_ * kdPercent) * 0.01f);
+#else
+  const int32_t output = static_cast<int32_t>((error * kp_ * kpPercent + derivative * kd_ * kdPercent) * 0.01f +
+                                              integral_ * ki_);
+#endif
   return clampOutput(output);
 }
 

@@ -222,7 +222,37 @@ TrackEntry practiceTrack() {
   return makeEntry(std::move(track), {2.0, 0.0});
 }
 
+TrackEntry longGaps() {
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.4).corner(5.0, 0, 0.4).corner(5.0, 1.8, 0.4).corner(0, 1.8, 0.4);
+  const std::vector<TrackGap> gaps = {
+      {{1.0, 0.0}, {1.10, 0.0}}, {{1.8, 0.0}, {2.00, 0.0}}, {{2.8, 0.0}, {3.10, 0.0}},
+      {{5.0, 0.95}, {5.0, 1.10}},
+      {{3.4, 1.8}, {3.00, 1.8}}, {{2.2, 1.8}, {1.80, 1.8}}};
+  Track track("Huecos largos", "Rectas con tramos blancos de 10, 20, 30, 15, 40 y 40 cm.", b.build(), 0.020, gaps);
+  return makeEntry(std::move(track), {0.6, 0.0});
 }
+
+TrackEntry dashedCurves() {
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.5).corner(4.0, 0, 0.5).corner(4.0, 1.6, 0.3).corner(0, 1.6, 0.5);
+  std::vector<TrackGap> gaps;
+  for (int k = 0; k < 20; k++) gaps.push_back({{1.0 + k * 0.06, 0.0}, {1.02 + k * 0.06, 0.0}});
+  const Vec2 center{3.5, 0.5};
+  for (int k = 0; k < 9; k++) {
+    const double a = -1.45 + k * 0.17;
+    gaps.push_back({center + Vec2{std::cos(a), std::sin(a)} * 0.5, center + Vec2{std::cos(a + 0.05), std::sin(a + 0.05)} * 0.5});
+  }
+  gaps.push_back({{4.0, 0.95}, {4.0, 1.05}});
+  gaps.push_back({{2.6, 1.6}, {2.45, 1.6}});
+  Track track("Punteada en curvas",
+              "20 huecos de 2 cm en recta, curva de 50 cm punteada, hueco de 10 cm tras la curva y otro de 15 cm.",
+              b.build(), 0.020, gaps);
+  return makeEntry(std::move(track), {0.6, 0.0});
+}
+
+}
+
 
 Vec2 competitionGapCenter() { return Vec2{337.5 * 3.66 / 995.0, (678.0 - 648.0) * 3.66 / 995.0}; }
 
@@ -302,6 +332,15 @@ TrackEntry extremeFastEsses() {
   return makeEntry(Track("Extrema: eses rápidas", "Seis eses de radio 12 cm después de una recta larga.", b.build()), {0.5, 0.0});
 }
 
+TrackEntry extremeGapAfterCurve() {
+  FilletedLoopBuilder b;
+  b.corner(0, 0, 0.4).corner(4.0, 0, 0.4).corner(4.0, 1.6, 0.3).corner(0, 1.6, 0.4);
+  const std::vector<TrackGap> gaps = {{{4.0, 0.62}, {4.0, 0.72}}, {{3.4, 1.6}, {3.25, 1.6}}};
+  Track track("Extrema: hueco tras curva", "Huecos de 10 y 15 cm a menos de 30 cm de la salida de una curva cerrada.",
+              b.build(), Track::kStandardLineWidth, gaps);
+  return makeEntry(std::move(track), {0.6, 0.0});
+}
+
 std::vector<TrackEntry> buildExtremeTrackLibrary() {
   std::vector<TrackEntry> library;
   library.push_back(extremeHairpins());
@@ -310,6 +349,7 @@ std::vector<TrackEntry> buildExtremeTrackLibrary() {
   library.push_back(extremeCornerDashes());
   library.push_back(extremeShallowCrossing());
   library.push_back(extremeFastEsses());
+  library.push_back(extremeGapAfterCurve());
   return library;
 }
 
@@ -328,6 +368,8 @@ std::vector<TrackEntry> buildTrackLibrary() {
   library.push_back(wavyFlower());
   library.push_back(loopClover());
   library.push_back(grandPrix());
+  library.push_back(longGaps());
+  library.push_back(dashedCurves());
   return library;
 }
 

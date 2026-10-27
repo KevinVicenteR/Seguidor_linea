@@ -15,13 +15,16 @@ LineFollower::LineFollower(LineSensorArray& sensors, IDrivetrain& drivetrain, co
       pd_(config.control.kp, config.control.kd, config.control.maxCorrectionPwm, config.control.derivativeFilterShift),
       guard_(config.adaptive),
       governor_(config.adaptive),
-      planner_(config.planner) {}
+      planner_(config.planner) {
+  pd_.setIntegral(config.control.ki, config.control.integralLimit);
+}
 
 void LineFollower::useConfig(const RobotConfig& config) {
   if (running_) return;
   config_ = &config;
   const ControlConfig& control = config.control;
   pd_.configure(control.kp, control.kd, control.maxCorrectionPwm, control.derivativeFilterShift);
+  pd_.setIntegral(control.ki, control.integralLimit);
   guard_.configure(config.adaptive);
   governor_.configure(config.adaptive);
   planner_.configure(config.planner);
@@ -69,6 +72,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   centeredSinceMs_ = nowMs - config_->lostLine.gapStraightMs;
   cornerSeen_ = false;
   bridgedOnce_ = false;
+  lastResyncBin_ = 0xFFFFFFFFUL;
 }
 
 void LineFollower::requestStop(uint32_t nowMs) {
@@ -210,7 +214,11 @@ void LineFollower::onGapEntered() {
   } else if (mode_ == RunMode::MapGuided) {
     const int32_t gap = map_->nearestGap(mapBin(), config_->planner.resyncWindowBins);
     const uint32_t lapStart = static_cast<uint32_t>(currentBin() / map_->length()) * map_->length();
-    if (gap >= 0) distanceUnits_ = (lapStart + static_cast<uint32_t>(gap)) * config_->planner.binUnits;
+    if (gap < 0) return;
+    const uint32_t target = lapStart + static_cast<uint32_t>(gap);
+    if (target == lastResyncBin_) return;
+    lastResyncBin_ = target;
+    distanceUnits_ = target * config_->planner.binUnits;
   }
 }
 
@@ -290,6 +298,20 @@ MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   } else {
     correction = pd_.update(pdError, guard_.gainPercent());
   }
+  pdCorrection_ = correction;
+#ifndef ATLAS_NO_TRAINING_HOOKS
+  if (control.residualNet != nullptr && historyCount_ >= kErrorHistory) {
+    for (uint8_t k = 0; k < 5; k++) residualInputs_[k] = derivativeInputs_[k];
+    const int16_t e = static_cast<int16_t>(error >> 6);
+    residualInputs_[5] = static_cast<int8_t>(e > 127 ? 127 : (e < -127 ? -127 : e));
+    residualInputs_[6] = derivativeInputs_[5];
+    const int16_t c = correction >> 3;
+    residualInputs_[7] = static_cast<int8_t>(c > 127 ? 127 : (c < -127 ? -127 : c));
+    int32_t residual = 0;
+    TinyMlp(*control.residualNet).evaluate(residualInputs_, &residual);
+    correction += static_cast<int16_t>(clampValue<int32_t>(residual, -control.residualLimit, control.residualLimit));
+  }
+#endif
   predictor_.remember(correction);
   lastError_ = error;
   const int16_t base = limitAcceleration(slowDownForCurve(scaleForCorner(velocity, nowMs), error), nowMs);
@@ -412,7 +434,8 @@ bool LineFollower::looksStraight(int32_t error) const {
 bool LineFollower::isCrossingGap(uint32_t nowMs) const {
   const LostLineConfig& lost = config_->lostLine;
   const bool cameFromStraight = centered_ && lastOnLineMs_ - centeredSinceMs_ >= lost.gapStraightMs;
-  return !reading_.onLine && cameFromStraight && nowMs - lastOnLineMs_ <= lost.gapBridgeMs;
+  const bool knownGap = mode_ == RunMode::MapGuided && map_ != nullptr && map_->nearestGap(mapBin(), 2) >= 0;
+  return !reading_.onLine && (cameFromStraight || knownGap) && nowMs - lastOnLineMs_ <= lost.gapBridgeMs;
 }
 
 MotorCommand LineFollower::bridgeGap(int16_t velocity) const {

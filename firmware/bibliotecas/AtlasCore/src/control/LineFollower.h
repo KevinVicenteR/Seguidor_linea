@@ -56,6 +56,9 @@ class LineFollower {
   const uint8_t* situationWeights() const { return situationWeights_; }
   const int8_t* derivativeInputs() const { return derivativeInputs_; }
   int32_t classicDerivative() const { return pd_.filteredDelta(); }
+  const int8_t* residualInputs() const { return residualInputs_; }
+  int16_t pdCorrection() const { return pdCorrection_; }
+  bool historyReady() const { return historyCount_ >= kErrorHistory; }
   uint32_t controlCycles() const { return runTicks_; }
 
  private:
@@ -112,6 +115,7 @@ class LineFollower {
   bool stoppedIncomplete_ = false;
   bool bridging_ = false;
   bool bridgedOnce_ = false;
+  uint32_t lastResyncBin_ = 0xFFFFFFFFUL;
   bool recovering_ = false;
 
   LinearRamp velocityRamp_;
@@ -138,6 +142,8 @@ class LineFollower {
   int16_t errorHistory_[kErrorHistory] = {};
   uint8_t historyCount_ = 0;
   int8_t derivativeInputs_[7] = {};
+  int8_t residualInputs_[8] = {};
+  int16_t pdCorrection_ = 0;
   uint8_t situationWeights_[4] = {};
   LineReading reading_;
   MotorCommand command_;
