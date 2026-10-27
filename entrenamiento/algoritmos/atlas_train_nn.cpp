@@ -183,18 +183,17 @@ std::vector<Sample> buildDataset(const std::vector<TrackEntry>& tracks) {
   }
 
   std::vector<Sample> dataset;
-  std::mutex lock;
+  std::vector<std::vector<Sample>> parts(runs.size());
   std::atomic<std::size_t> next{0};
   auto worker = [&] {
     for (std::size_t i = next++; i < runs.size(); i = next++) {
-      std::vector<Sample> part = collect(tracks, runs[i]);
-      std::lock_guard<std::mutex> guard(lock);
-      dataset.insert(dataset.end(), part.begin(), part.end());
+      parts[i] = collect(tracks, runs[i]);
     }
   };
   std::vector<std::thread> pool;
   for (unsigned k = 0; k < std::max(2u, std::thread::hardware_concurrency()); k++) pool.emplace_back(worker);
   for (std::thread& t : pool) t.join();
+  for (const auto& part : parts) dataset.insert(dataset.end(), part.begin(), part.end());
   std::printf("Datos: %zu corridas, %zu muestras\n", runs.size(), dataset.size());
   return dataset;
 }
@@ -236,89 +235,6 @@ double validationRms(const FloatNet& net, const std::vector<Sample>& data, const
     sum += error * error;
   }
   return std::sqrt(sum / std::max<std::size_t>(1, indices.size()));
-}
-
-FloatNet train(const std::vector<Sample>& data, std::size_t samples, int maxEpochs) {
-  std::mt19937 random(7);
-  FloatNet net;
-  std::normal_distribution<double> init(0.0, 1.0);
-  for (int j = 0; j < kHidden; j++) {
-    for (int i = 0; i < kInputs; i++) net.w1[j][i] = init(random) * std::sqrt(2.0 / kInputs);
-    net.b1[j] = 0.1;
-    net.w2[j] = init(random) * std::sqrt(1.0 / kHidden);
-  }
-  net.b2 = 0;
-
-  std::vector<std::size_t> order, check;
-  for (std::size_t i = 0; i < data.size(); i++) (data[i].validation ? check : order).push_back(i);
-  std::shuffle(order.begin(), order.end(), random);
-  std::shuffle(check.begin(), check.end(), random);
-  if (order.size() > samples) order.resize(samples);
-  if (check.size() > 100000) check.resize(100000);
-  std::printf("Entrenando con %zu lecturas; parada temprana con %zu lecturas de validación\n", order.size(),
-              check.size());
-
-  std::vector<double> m(kParams, 0), v(kParams, 0), grad(kParams);
-  const double beta1 = 0.9, beta2 = 0.999;
-  long step = 0;
-  const std::size_t batch = 128;
-  double rate = 3e-3;
-  FloatNet best = net;
-  double bestRms = 1e9;
-  int bestEpoch = 0, sinceBest = 0, sinceDrop = 0;
-  for (int epoch = 0; epoch < maxEpochs; epoch++) {
-    std::shuffle(order.begin(), order.end(), random);
-    double loss = 0;
-    for (std::size_t first = 0; first < order.size(); first += batch) {
-      std::fill(grad.begin(), grad.end(), 0.0);
-      const std::size_t last = std::min(order.size(), first + batch);
-      for (std::size_t b = first; b < last; b++) {
-        const Sample& s = data[order[b]];
-        double hidden[kHidden];
-        const double error = net.forward(s.input, hidden) - s.target;
-        loss += error * error;
-        for (int j = 0; j < kHidden; j++) {
-          grad[kHidden * kInputs + kHidden + j] += error * hidden[j];
-          if (hidden[j] <= 0) continue;
-          const double back = error * net.w2[j];
-          for (int i = 0; i < kInputs; i++) grad[j * kInputs + i] += back * (s.input[i] / 127.0);
-          grad[kHidden * kInputs + j] += back;
-        }
-        grad[kParams - 1] += error;
-      }
-      step++;
-      const double scale = 1.0 / static_cast<double>(last - first);
-      for (int k = 0; k < kParams; k++) {
-        const double g = grad[k] * scale;
-        m[k] = beta1 * m[k] + (1 - beta1) * g;
-        v[k] = beta2 * v[k] + (1 - beta2) * g * g;
-        const double mHat = m[k] / (1 - std::pow(beta1, step));
-        const double vHat = v[k] / (1 - std::pow(beta2, step));
-        *param(net, k) -= rate * mHat / (std::sqrt(vHat) + 1e-8);
-      }
-    }
-    const double valRms = validationRms(net, data, check);
-    if (valRms < bestRms * 0.9995) {
-      bestRms = valRms;
-      best = net;
-      bestEpoch = epoch;
-      sinceBest = sinceDrop = 0;
-    } else {
-      sinceBest++;
-      if (++sinceDrop >= 40 && rate > 1e-5) {
-        rate *= 0.5;
-        sinceDrop = 0;
-      }
-    }
-    if (epoch % 50 == 0) {
-      std::printf("  época %4d  RMS entrenamiento %.4f  validación %.4f sensores  (paso %.1e)\n", epoch,
-                  std::sqrt(loss / order.size()), valRms, rate);
-      std::fflush(stdout);
-    }
-    if (sinceBest >= 200) break;
-  }
-  std::printf("Mejor época %d: RMS de validación %.4f sensores (%.3f mm)\n", bestEpoch, bestRms, bestRms * 9.0);
-  return best;
 }
 
 struct QuantNet {
@@ -400,32 +316,124 @@ Errors evaluate(const FloatNet& net, const QuantNet& q, const std::vector<Sample
   return e;
 }
 
+FloatNet train(const std::vector<Sample>& data, std::size_t samples, int maxEpochs,
+               uint32_t seed = 7, bool robust = false, QuantNet* selected = nullptr) {
+  std::mt19937 random(seed);
+  FloatNet net;
+  std::normal_distribution<double> init(0.0, 1.0);
+  for (int j = 0; j < kHidden; j++) {
+    for (int i = 0; i < kInputs; i++) net.w1[j][i] = init(random) * std::sqrt(2.0 / kInputs);
+    net.b1[j] = 0.1;
+    net.w2[j] = init(random) * std::sqrt(1.0 / kHidden);
+  }
+  net.b2 = 0;
+
+  std::vector<std::size_t> order, check;
+  for (std::size_t i = 0; i < data.size(); i++) (data[i].validation ? check : order).push_back(i);
+  std::shuffle(order.begin(), order.end(), random);
+  std::shuffle(check.begin(), check.end(), random);
+  if (order.size() > samples) order.resize(samples);
+  if (check.size() > 100000) check.resize(100000);
+  std::printf("Entrenando con %zu lecturas; parada temprana con %zu lecturas de validación\n", order.size(),
+              robust ? static_cast<std::size_t>(std::count_if(data.begin(), data.end(),
+                         [](const Sample& s) { return s.validation; })) : check.size());
+
+  std::vector<double> m(kParams, 0), v(kParams, 0), grad(kParams);
+  const double beta1 = 0.9, beta2 = 0.999;
+  long step = 0;
+  const std::size_t batch = 128;
+  double rate = 3e-3;
+  FloatNet best = net;
+  double bestRms = 1e9;
+  double bestScore = 1e9;
+  int bestEpoch = 0, sinceBest = 0, sinceDrop = 0;
+  for (int epoch = 0; epoch < maxEpochs; epoch++) {
+    std::shuffle(order.begin(), order.end(), random);
+    double loss = 0;
+    for (std::size_t first = 0; first < order.size(); first += batch) {
+      std::fill(grad.begin(), grad.end(), 0.0);
+      const std::size_t last = std::min(order.size(), first + batch);
+      for (std::size_t b = first; b < last; b++) {
+        const Sample& s = data[order[b]];
+        double hidden[kHidden];
+        const double error = net.forward(s.input, hidden) - s.target;
+        loss += error * error;
+        const double delta = error * (robust ? 1.0 + std::min(8.0, error * error / 0.0225) : 1.0);
+        for (int j = 0; j < kHidden; j++) {
+          grad[kHidden * kInputs + kHidden + j] += delta * hidden[j];
+          if (hidden[j] <= 0) continue;
+          const double back = delta * net.w2[j];
+          for (int i = 0; i < kInputs; i++) grad[j * kInputs + i] += back * (s.input[i] / 127.0);
+          grad[kHidden * kInputs + j] += back;
+        }
+        grad[kParams - 1] += delta;
+      }
+      step++;
+      const double scale = 1.0 / static_cast<double>(last - first);
+      for (int k = 0; k < kParams; k++) {
+        const double g = grad[k] * scale;
+        m[k] = beta1 * m[k] + (1 - beta1) * g;
+        v[k] = beta2 * v[k] + (1 - beta2) * g * g;
+        const double mHat = m[k] / (1 - std::pow(beta1, step));
+        const double vHat = v[k] / (1 - std::pow(beta2, step));
+        *param(net, k) -= rate * mHat / (std::sqrt(vHat) + 1e-8);
+      }
+    }
+    if (robust && epoch % 5 != 0) continue;
+    double valRms = robust ? 0.0 : validationRms(net, data, check);
+    double score = valRms;
+    QuantNet candidate{};
+    if (robust) {
+      candidate = quantize(net, data);
+      const Errors e = evaluate(net, candidate, data, true);
+      valRms = e.network / 1000.0;
+      score = (e.quantized + 0.05 * e.maxQuantized) / 1000.0;
+      std::printf("  selección época %d: RMS %.2f máximo %.2f métrica %.5f\n",
+                  epoch, e.quantized, e.maxQuantized, score);
+    }
+    if (score < bestScore * 0.9995) {
+      bestScore = score;
+      if (selected) *selected = candidate;
+      bestRms = valRms;
+      best = net;
+      bestEpoch = epoch;
+      sinceBest = sinceDrop = 0;
+    } else {
+      sinceBest += robust ? 5 : 1;
+      sinceDrop += robust ? 5 : 1;
+      if (sinceDrop >= 40 && rate > 1e-5) {
+        rate *= 0.5;
+        sinceDrop = 0;
+      }
+    }
+    if (epoch % 50 == 0) {
+      std::printf("  época %4d  RMS entrenamiento %.4f  validación %.4f sensores  (paso %.1e)\n", epoch,
+                  std::sqrt(loss / order.size()), valRms, rate);
+      std::fflush(stdout);
+    }
+    if (sinceBest >= 200) break;
+  }
+  std::printf("Mejor época %d: RMS de validación %.4f sensores (%.3f mm)\n", bestEpoch, bestRms, bestRms * 9.0);
+  return best;
+}
+
 template <typename T>
 std::string join(const T* values, int count, int perLine) {
   std::string text;
   for (int i = 0; i < count; i++) {
     if (i % perLine == 0) text += "\n    ";
     text += std::to_string(static_cast<long>(values[i]));
-    if (i + 1 < count) text += ", ";
+    if (i + 1 < count) {
+      text += ",";
+      if ((i + 1) % perLine != 0) text += " ";
+    }
   }
   return text;
 }
 
-void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, std::size_t samples) {
-  char date[32];
-  const std::time_t now = std::time(nullptr);
-  std::strftime(date, sizeof(date), "%Y-%m-%d", std::localtime(&now));
+void writeHeader(const std::string& path, const QuantNet& q) {
   std::ofstream out(path);
-  out << "/*\n"
-      << "  NeuralPositionWeights.h - GENERADO por entrenamiento/algoritmos/atlas_train_nn.cpp\n"
-      << "  (atlas_train_nn posicion). No editar a mano.\n\n"
-      << "  Red " << kInputs << " -> " << kHidden << " ReLU -> 1: posición fina de la línea.\n"
-      << "  Entrenada el " << date << " con " << samples << " lecturas simuladas (parada temprana).\n"
-      << "  Validación (posición, RMS en milésimas de sensor; 1000 = 9 mm):\n"
-      << "    promedio ponderado " << std::lround(e.weighted) << ", red " << std::lround(e.quantized)
-      << " (máx " << std::lround(e.maxQuantized) << ")\n"
-      << "*/\n"
-      << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
+  out << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
       << "namespace atlas {\nnamespace neural {\n\n"
       << "constexpr uint8_t kPositionInputs = " << kInputs << ";\n"
       << "constexpr uint8_t kPositionHidden = " << kHidden << ";\n\n"
@@ -438,18 +446,19 @@ void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, st
       << "const TinyMlpWeights kPositionNet = {kPositionInputs, kPositionHidden, 1,\n"
       << "                                     kPositionWeights1, kPositionBias1, " << int(q.shift1) << ",\n"
       << "                                     kPositionWeights2, kPositionBias2, " << int(q.shift2) << "};\n\n"
-      << "}  // namespace neural\n}  // namespace atlas\n";
+      << "}\n}\n";
 }
 
-int trainPosition(std::size_t samples) {
+int trainPosition(std::size_t samples, uint32_t seed) {
   const std::vector<TrackEntry> tracks = buildTrackLibrary();
   const std::vector<Sample> data = buildDataset(tracks);
   std::size_t validation = 0;
   for (const Sample& s : data) validation += s.validation;
   std::printf("Disponibles: entrenamiento %zu, validación %zu\n", data.size() - validation, validation);
 
-  const FloatNet net = train(data, samples, 5000);
-  const QuantNet q = quantize(net, data);
+  std::printf("Semilla %u; pérdida con énfasis en errores grandes; selección entera RMS + 0.05 máximo\n", seed);
+  QuantNet q;
+  const FloatNet net = train(data, samples, 1200, seed, true, &q);
   const Errors train = evaluate(net, q, data, false);
   const Errors val = evaluate(net, q, data, true);
   std::printf("\nRMS de posición (milésimas de sensor, 1000 = 9 mm)\n");
@@ -462,7 +471,7 @@ int trainPosition(std::size_t samples) {
   std::printf("  shift1 %d  shift2 %d\n", q.shift1, q.shift2);
 
   const std::string path = std::string(ATLAS_SOURCE_DIR) + "/firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralPositionWeights.h";
-  writeHeader(path, q, val, std::min(samples, data.size() - validation));
+  writeHeader(path, q);
   std::printf("Pesos escritos en %s\n", path.c_str());
   return 0;
 }
@@ -1108,7 +1117,8 @@ int testPredictor(int seedsPerTrack) {
 
 int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "";
-  if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000);
+  if (mode == "posicion") return trainPosition(argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 25000,
+                                               argc > 3 ? std::strtoul(argv[3], nullptr, 10) : 7);
   if (mode == "ganancias") return gains::sweepGains();
   if (mode == "predictor") return gains::testPredictor(argc > 2 ? std::atoi(argv[2]) : 2);
   if (mode == "derivada-prueba") return gains::testDerivative(argc > 2 ? std::atoi(argv[2]) : 3,
@@ -1119,6 +1129,6 @@ int main(int argc, char** argv) {
     const bool write = argc > 4 && std::string(argv[4]) == "escribir";
     return derivative::train(samples, lead, write);
   }
-  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] | ganancias | derivada [ciclos] [adelanto] [escribir]\n");
+  std::fprintf(stderr, "Uso: atlas_train_nn posicion [lecturas] [semilla] | ganancias | derivada [ciclos] [adelanto] [escribir]\n");
   return 1;
 }

@@ -1,12 +1,3 @@
-/*
-  NeuralPositionWeights.h - GENERADO por entrenamiento/algoritmos/atlas_train_nn.cpp
-  (atlas_train_nn posicion). No editar a mano.
-
-  Red 7 -> 8 ReLU -> 1: posición fina de la línea.
-  Entrenada el 2026-10-27 con 100000 lecturas simuladas (parada temprana).
-  Validación (posición, RMS en milésimas de sensor; 1000 = 9 mm):
-    promedio ponderado 150, red 56 (máx 802)
-*/
 #pragma once
 
 #include <stdint.h>
@@ -21,25 +12,25 @@ constexpr uint8_t kPositionInputs = 7;
 constexpr uint8_t kPositionHidden = 8;
 
 ATLAS_PROGMEM const int8_t kPositionWeights1[kPositionHidden * kPositionInputs] = {
-    -36, -28, 31, 44, -10, -49, -27, 
-    -12, -4, 23, -18, -38, 42, 36, 
-    -7, 75, -72, 15, -49, -17, -18, 
-    24, -62, -1, -57, -29, 60, 14, 
-    -57, -14, 16, -63, -7, 14, -53, 
-    -34, -29, -40, 54, 27, 66, -32, 
-    -10, 64, 21, 16, -48, 114, -33, 
-    6, 13, -15, -46, 16, 127, 41};
+    -60, -3, 47, 81, -5, -70, -45,
+    -19, -9, 35, -30, -65, 62, 59,
+    -11, 103, -87, 0, -51, -7, -30,
+    39, -5, -71, -90, -25, 127, 23,
+    -94, -23, 26, -103, -12, 23, -87,
+    -56, -77, -21, 108, 32, 13, -53,
+    -17, 22, 53, 34, -90, 57, -54,
+    9, 44, -64, -91, 57, 122, 68};
 ATLAS_PROGMEM const int32_t kPositionBias1[kPositionHidden] = {
-    934, 173, 5616, 8488, 794, 
-    -483, 1719, 4875};
+    -825, 45, 7980, 710, 1306,
+    1042, 2067, 8705};
 ATLAS_PROGMEM const int16_t kPositionWeights2[kPositionHidden] = {
-    -2569, 2885, 3623, 2134, -5637, 2896, -3028, 1994};
+    -4378, 2738, 4785, -177, -6854, 3730, -4220, 3141};
 ATLAS_PROGMEM const int32_t kPositionBias2[1] = {
-    5254056};
+    6342512};
 
 const TinyMlpWeights kPositionNet = {kPositionInputs, kPositionHidden, 1,
                                      kPositionWeights1, kPositionBias1, 1,
-                                     kPositionWeights2, kPositionBias2, 15};
+                                     kPositionWeights2, kPositionBias2, 16};
 
-}  // namespace neural
-}  // namespace atlas
+}
+}

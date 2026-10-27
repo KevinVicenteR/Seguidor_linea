@@ -1,5 +1,5 @@
 window.ATLAS_DATOS = {
-  "generado": "2026-10-27T18:32:24.475068+00:00",
+  "generado": "2026-10-27T19:10:50.987607+00:00",
   "con_red": [
     {
       "escenario": "Pista de competencia · PWM 130 · firmware · Intento 1 (reconocimiento)",
@@ -1628,58 +1628,48 @@ window.ATLAS_DATOS = {
     "curva": [
       {
         "epoca": 0,
-        "entrenamiento": 0.1715,
-        "validacion": 0.0662
+        "entrenamiento": 0.1768,
+        "validacion": 0.0715
       },
       {
         "epoca": 50,
-        "entrenamiento": 0.0527,
-        "validacion": 0.0583
+        "entrenamiento": 0.0532,
+        "validacion": 0.057
       },
       {
         "epoca": 100,
         "entrenamiento": 0.0525,
-        "validacion": 0.0569
+        "validacion": 0.0568
       },
       {
         "epoca": 150,
-        "entrenamiento": 0.0524,
-        "validacion": 0.0567
+        "entrenamiento": 0.0523,
+        "validacion": 0.0564
       },
       {
         "epoca": 200,
         "entrenamiento": 0.0522,
-        "validacion": 0.0567
-      },
-      {
-        "epoca": 250,
-        "entrenamiento": 0.0522,
-        "validacion": 0.0566
-      },
-      {
-        "epoca": 300,
-        "entrenamiento": 0.0521,
-        "validacion": 0.0568
+        "validacion": 0.0564
       }
     ],
     "tabla": [
       {
         "grupo": "entrenamiento",
         "clasico": 135,
-        "doble": 52,
-        "enteros": 52,
-        "maximo": 877
+        "doble": 54,
+        "enteros": 54,
+        "maximo": 806
       },
       {
         "grupo": "validación",
         "clasico": 150,
-        "doble": 56,
-        "enteros": 56,
-        "maximo": 802
+        "doble": 57,
+        "enteros": 57,
+        "maximo": 743
       }
     ],
-    "mejor_epoca": 145,
-    "mejor_rms": 0.0565
+    "mejor_epoca": 35,
+    "mejor_rms": 0.057
   },
   "evaluacion": {
     "red": {
@@ -1770,85 +1760,85 @@ window.ATLAS_DATOS = {
   },
   "red": {
     "Weights1": [
-      -36,
-      -28,
-      31,
-      44,
-      -10,
-      -49,
-      -27,
-      -12,
-      -4,
-      23,
-      -18,
-      -38,
-      42,
-      36,
+      -60,
+      -3,
+      47,
+      81,
+      -5,
+      -70,
+      -45,
+      -19,
+      -9,
+      35,
+      -30,
+      -65,
+      62,
+      59,
+      -11,
+      103,
+      -87,
+      0,
+      -51,
       -7,
-      75,
-      -72,
-      15,
-      -49,
-      -17,
-      -18,
-      24,
-      -62,
-      -1,
-      -57,
-      -29,
-      60,
-      14,
-      -57,
-      -14,
-      16,
-      -63,
-      -7,
-      14,
-      -53,
-      -34,
-      -29,
-      -40,
-      54,
-      27,
-      66,
-      -32,
-      -10,
-      64,
-      21,
-      16,
-      -48,
-      114,
-      -33,
-      6,
-      13,
-      -15,
-      -46,
-      16,
+      -30,
+      39,
+      -5,
+      -71,
+      -90,
+      -25,
       127,
-      41
+      23,
+      -94,
+      -23,
+      26,
+      -103,
+      -12,
+      23,
+      -87,
+      -56,
+      -77,
+      -21,
+      108,
+      32,
+      13,
+      -53,
+      -17,
+      22,
+      53,
+      34,
+      -90,
+      57,
+      -54,
+      9,
+      44,
+      -64,
+      -91,
+      57,
+      122,
+      68
     ],
     "Bias1": [
-      934,
-      173,
-      5616,
-      8488,
-      794,
-      -483,
-      1719,
-      4875
+      -825,
+      45,
+      7980,
+      710,
+      1306,
+      1042,
+      2067,
+      8705
     ],
     "Weights2": [
-      -2569,
-      2885,
-      3623,
-      2134,
-      -5637,
-      2896,
-      -3028,
-      1994
+      -4378,
+      2738,
+      4785,
+      -177,
+      -6854,
+      3730,
+      -4220,
+      3141
     ],
     "Bias2": [
-      5254056
+      6342512
     ]
   },
   "configuracion": {

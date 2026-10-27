@@ -1,19 +1,120 @@
+Entrenamiento final: ./build/simulacion/atlas_train_nn posicion 100000 7
+Arquitectura 7 -> 8 ReLU -> 1; 100000 lecturas totales de entrenamiento.
+Orden de recolección fijo; validación completa compartida de 570512 muestras.
+Repetición de la semilla 7: todos los pesos, sesgos y shifts idénticos a la primera corrida.
+
 Datos: 135 corridas, 2835337 muestras
 Disponibles: entrenamiento 2264825, validación 570512
-Entrenando con 100000 lecturas; parada temprana con 100000 lecturas de validación
-  época    0  RMS entrenamiento 0.1715  validación 0.0662 sensores  (paso 3.0e-03)
-  época   50  RMS entrenamiento 0.0527  validación 0.0583 sensores  (paso 3.0e-03)
-  época  100  RMS entrenamiento 0.0525  validación 0.0569 sensores  (paso 1.5e-03)
-  época  150  RMS entrenamiento 0.0524  validación 0.0567 sensores  (paso 1.5e-03)
-  época  200  RMS entrenamiento 0.0522  validación 0.0567 sensores  (paso 7.5e-04)
-  época  250  RMS entrenamiento 0.0522  validación 0.0566 sensores  (paso 3.8e-04)
-  época  300  RMS entrenamiento 0.0521  validación 0.0568 sensores  (paso 1.9e-04)
-Mejor época 145: RMS de validación 0.0565 sensores (0.509 mm)
+Semilla 7; pérdida con énfasis en errores grandes; selección entera RMS + 0.05 máximo
+Entrenando con 100000 lecturas; parada temprana con 570512 lecturas de validación
+  selección época 0: RMS 71.70 máximo 767.00 métrica 0.11005
+  época    0  RMS entrenamiento 0.1768  validación 0.0715 sensores  (paso 3.0e-03)
+  selección época 5: RMS 58.55 máximo 791.00 métrica 0.09810
+  selección época 10: RMS 58.21 máximo 808.00 métrica 0.09861
+  selección época 15: RMS 58.27 máximo 817.00 métrica 0.09912
+  selección época 20: RMS 57.66 máximo 807.00 métrica 0.09801
+  selección época 25: RMS 57.27 máximo 744.00 métrica 0.09447
+  selección época 30: RMS 58.25 máximo 749.00 métrica 0.09570
+  selección época 35: RMS 56.98 máximo 743.00 métrica 0.09413
+  selección época 40: RMS 56.97 máximo 744.00 métrica 0.09417
+  selección época 45: RMS 57.51 máximo 800.00 métrica 0.09751
+  selección época 50: RMS 57.13 máximo 760.00 métrica 0.09513
+  época   50  RMS entrenamiento 0.0532  validación 0.0570 sensores  (paso 3.0e-03)
+  selección época 55: RMS 57.36 máximo 785.00 métrica 0.09661
+  selección época 60: RMS 56.50 máximo 788.00 métrica 0.09590
+  selección época 65: RMS 56.67 máximo 790.00 métrica 0.09617
+  selección época 70: RMS 56.55 máximo 800.00 métrica 0.09655
+  selección época 75: RMS 56.47 máximo 793.00 métrica 0.09612
+  selección época 80: RMS 56.77 máximo 797.00 métrica 0.09662
+  selección época 85: RMS 56.43 máximo 793.00 métrica 0.09608
+  selección época 90: RMS 56.26 máximo 791.00 métrica 0.09581
+  selección época 95: RMS 56.24 máximo 797.00 métrica 0.09609
+  selección época 100: RMS 56.59 máximo 793.00 métrica 0.09624
+  época  100  RMS entrenamiento 0.0525  validación 0.0568 sensores  (paso 1.5e-03)
+  selección época 105: RMS 56.68 máximo 804.00 métrica 0.09688
+  selección época 110: RMS 57.64 máximo 810.00 métrica 0.09814
+  selección época 115: RMS 56.92 máximo 797.00 métrica 0.09677
+  selección época 120: RMS 56.65 máximo 804.00 métrica 0.09685
+  selección época 125: RMS 56.39 máximo 798.00 métrica 0.09629
+  selección época 130: RMS 56.37 máximo 800.00 métrica 0.09637
+  selección época 135: RMS 56.26 máximo 794.00 métrica 0.09596
+  selección época 140: RMS 56.44 máximo 799.00 métrica 0.09639
+  selección época 145: RMS 56.35 máximo 794.00 métrica 0.09605
+  selección época 150: RMS 56.23 máximo 798.00 métrica 0.09613
+  época  150  RMS entrenamiento 0.0523  validación 0.0564 sensores  (paso 7.5e-04)
+  selección época 155: RMS 56.35 máximo 800.00 métrica 0.09635
+  selección época 160: RMS 56.44 máximo 801.00 métrica 0.09649
+  selección época 165: RMS 56.53 máximo 801.00 métrica 0.09658
+  selección época 170: RMS 56.56 máximo 794.00 métrica 0.09626
+  selección época 175: RMS 56.41 máximo 801.00 métrica 0.09646
+  selección época 180: RMS 56.36 máximo 797.00 métrica 0.09621
+  selección época 185: RMS 56.41 máximo 802.00 métrica 0.09651
+  selección época 190: RMS 56.31 máximo 801.00 métrica 0.09636
+  selección época 195: RMS 56.35 máximo 802.00 métrica 0.09645
+  selección época 200: RMS 56.29 máximo 796.00 métrica 0.09609
+  época  200  RMS entrenamiento 0.0522  validación 0.0564 sensores  (paso 1.9e-04)
+  selección época 205: RMS 56.84 máximo 804.00 métrica 0.09704
+  selección época 210: RMS 56.39 máximo 797.00 métrica 0.09624
+  selección época 215: RMS 56.38 máximo 796.00 métrica 0.09618
+  selección época 220: RMS 56.43 máximo 795.00 métrica 0.09618
+  selección época 225: RMS 56.33 máximo 795.00 métrica 0.09608
+  selección época 230: RMS 56.18 máximo 799.00 métrica 0.09613
+  selección época 235: RMS 56.36 máximo 794.00 métrica 0.09606
+Mejor época 35: RMS de validación 0.0570 sensores (0.513 mm)
 
 RMS de posición (milésimas de sensor, 1000 = 9 mm)
                  ponderado   red(double)   red(enteros)   máx(enteros)
-  entrenamiento      135          52            52            877
-  validación         150          56            56            802
+  entrenamiento      135          54            54            806
+  validación         150          57            57            743
   mejora en validación: 62 %
-  shift1 1  shift2 15
+  shift1 1  shift2 16
 Pesos escritos en /Users/kevinalexandervicenterosaldo/Seguidor_linea/firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralPositionWeights.h
+
+Banco final: 13 pistas obligatorias x 3 modelos x 8 semillas x 3 intentos x 4 agarres = 3744 carreras.
+Comando por agarre: /private/tmp/atlas-sweep7 seeds=8 mu={100,90,80,70}
+Compilado con c++ -std=c++17 -O2, todos los includes de AtlasCore y simulacion/motor, libatlas_sim_lib.a y libatlas_core.a reconstruidas con CMake.
+seeds=8 mu=100 | fallas recon 0/312 mapa 5/624 | t recon 16.21 t mapa 13.95 | Hexágono de figuras:3 Gran Premio:2 | error 21.10 mm zigzag 0.68/m
+seeds=8 mu=90 | fallas recon 0/312 mapa 0/624 | t recon 16.27 t mapa 14.27 | | error 23.06 mm zigzag 0.68/m
+seeds=8 mu=80 | fallas recon 0/312 mapa 2/624 | t recon 16.35 t mapa 14.67 | Hexágono de figuras:1 Gran Premio:1 | error 25.43 mm zigzag 0.70/m
+seeds=8 mu=70 | fallas recon 0/312 mapa 0/624 | t recon 16.47 t mapa 15.12 | | error 29.79 mm zigzag 0.74/m
+Total final: reconocimiento 0/1248, mapa 7/2496; total 7/3744.
+
+Referencia 50k: pesos de 0ea50ab, mismo banco y configuración.
+seeds=8 mu=100 | fallas recon 0/312 mapa 1/624 | t recon 16.21 t mapa 13.96 | Hexágono de figuras:1 | error 21.12 mm zigzag 0.67/m
+seeds=8 mu=90 | fallas recon 0/312 mapa 7/624 | t recon 16.26 t mapa 14.25 | Hexágono de figuras:3 Gran Premio:4 | error 22.96 mm zigzag 0.68/m
+seeds=8 mu=80 | fallas recon 0/312 mapa 1/624 | t recon 16.35 t mapa 14.67 | Gran Premio:1 | error 25.36 mm zigzag 0.69/m
+seeds=8 mu=70 | fallas recon 0/312 mapa 0/624 | t recon 16.47 t mapa 15.13 | | error 29.71 mm zigzag 0.73/m
+Total referencia: reconocimiento 0/1248, mapa 9/2496; total 9/3744.
+Cambio: 2 fallas menos (-22.2 %); tiempos de mapa sin deterioro apreciable.
+El máximo entero final (743) mejora el anterior de 100k (802), pero sigue por encima del reportado para 50k (614).
+
+Otras búsquedas: semilla 17, RMS 57, máximo 793; descartada al acumular 8 fallas en mu100, frente a 7 totales del ganador. No se completaron sus otros agarres.
+Se exploró refinamiento desde 50k; se interrumpió sin exportar ni seleccionar pesos.
+
+Verificación final CTest:
+Test project /Users/kevinalexandervicenterosaldo/Seguidor_linea/build
+    Start 1: unit_tests
+1/4 Test #1: unit_tests .......................   Passed    2.88 sec
+    Start 2: simulation_quick
+2/4 Test #2: simulation_quick .................   Passed    3.48 sec
+    Start 3: simulation_firmware
+3/4 Test #3: simulation_firmware ..............   Passed    4.38 sec
+    Start 4: simulation_firmware_classic
+4/4 Test #4: simulation_firmware_classic ......   Passed    4.78 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =  16.46 sec
+
+atlas_sim --firmware:
+Aprobados: 45/45   Obligatorios fallidos: 0   (* = prueba extrema, no obligatoria; límite 40 s por pista)
+
+Firmware AVR:
+El comando sin variables de entorno encontró un bloqueo de escritura en ~/.platformio/platforms.lock.
+Se copiaron atmelavr y los paquetes AVR instalados a /private/tmp/atlas-nn-pio, sin cambiar platformio.ini.
+Comando: PLATFORMIO_CORE_DIR=/private/tmp/atlas-nn-pio PLATFORMIO_SETTING_ENABLE_TELEMETRY=no ~/.platformio/penv/bin/pio run -e atlas
+RAM:   [========  ]  80.0% (used 1638 bytes from 2048 bytes)
+Flash: [==========]  98.1% (used 30136 bytes from 30720 bytes)
+========================= [SUCCESS] Took 58.84 seconds =========================
+atlas          SUCCESS   00:00:58.845
+SHA256 del header final: c91e045eb74a2846317fd49134209868218e28a54f74bd6c27897ab7063b164a
