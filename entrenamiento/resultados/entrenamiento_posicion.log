@@ -1,21 +1,19 @@
-Datos: 117 corridas, 2465245 muestras
-Disponibles: entrenamiento 1978185, validación 487060
-Entrenando con 50000 lecturas; parada temprana con 100000 lecturas de validación
-  época    0  RMS entrenamiento 0.2356  validación 0.0739 sensores  (paso 3.0e-03)
-  época   50  RMS entrenamiento 0.0542  validación 0.0585 sensores  (paso 3.0e-03)
-  época  100  RMS entrenamiento 0.0539  validación 0.0582 sensores  (paso 1.5e-03)
-  época  150  RMS entrenamiento 0.0534  validación 0.0577 sensores  (paso 7.5e-04)
-  época  200  RMS entrenamiento 0.0532  validación 0.0577 sensores  (paso 3.8e-04)
-  época  250  RMS entrenamiento 0.0532  validación 0.0576 sensores  (paso 1.9e-04)
-  época  300  RMS entrenamiento 0.0531  validación 0.0576 sensores  (paso 9.4e-05)
-  época  350  RMS entrenamiento 0.0531  validación 0.0576 sensores  (paso 4.7e-05)
-  época  400  RMS entrenamiento 0.0531  validación 0.0576 sensores  (paso 2.3e-05)
-Mejor época 205: RMS de validación 0.0575 sensores (0.518 mm)
+Datos: 135 corridas, 2835337 muestras
+Disponibles: entrenamiento 2264825, validación 570512
+Entrenando con 100000 lecturas; parada temprana con 100000 lecturas de validación
+  época    0  RMS entrenamiento 0.1715  validación 0.0662 sensores  (paso 3.0e-03)
+  época   50  RMS entrenamiento 0.0527  validación 0.0583 sensores  (paso 3.0e-03)
+  época  100  RMS entrenamiento 0.0525  validación 0.0569 sensores  (paso 1.5e-03)
+  época  150  RMS entrenamiento 0.0524  validación 0.0567 sensores  (paso 1.5e-03)
+  época  200  RMS entrenamiento 0.0522  validación 0.0567 sensores  (paso 7.5e-04)
+  época  250  RMS entrenamiento 0.0522  validación 0.0566 sensores  (paso 3.8e-04)
+  época  300  RMS entrenamiento 0.0521  validación 0.0568 sensores  (paso 1.9e-04)
+Mejor época 145: RMS de validación 0.0565 sensores (0.509 mm)
 
 RMS de posición (milésimas de sensor, 1000 = 9 mm)
                  ponderado   red(double)   red(enteros)   máx(enteros)
-  entrenamiento      134          53            53            893
-  validación         145          58            58            614
-  mejora en validación: 60 %
+  entrenamiento      135          52            52            877
+  validación         150          56            56            802
+  mejora en validación: 62 %
   shift1 1  shift2 15
 Pesos escritos en /Users/kevinalexandervicenterosaldo/Seguidor_linea/firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralPositionWeights.h

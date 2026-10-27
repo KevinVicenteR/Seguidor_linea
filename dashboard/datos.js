@@ -1,5 +1,5 @@
 window.ATLAS_DATOS = {
-  "generado": "2026-10-27T03:31:13.757125+00:00",
+  "generado": "2026-10-27T18:32:24.475068+00:00",
   "con_red": [
     {
       "escenario": "Pista de competencia · PWM 130 · firmware · Intento 1 (reconocimiento)",
@@ -1628,68 +1628,58 @@ window.ATLAS_DATOS = {
     "curva": [
       {
         "epoca": 0,
-        "entrenamiento": 0.2356,
-        "validacion": 0.0739
+        "entrenamiento": 0.1715,
+        "validacion": 0.0662
       },
       {
         "epoca": 50,
-        "entrenamiento": 0.0542,
-        "validacion": 0.0585
+        "entrenamiento": 0.0527,
+        "validacion": 0.0583
       },
       {
         "epoca": 100,
-        "entrenamiento": 0.0539,
-        "validacion": 0.0582
+        "entrenamiento": 0.0525,
+        "validacion": 0.0569
       },
       {
         "epoca": 150,
-        "entrenamiento": 0.0534,
-        "validacion": 0.0577
+        "entrenamiento": 0.0524,
+        "validacion": 0.0567
       },
       {
         "epoca": 200,
-        "entrenamiento": 0.0532,
-        "validacion": 0.0577
+        "entrenamiento": 0.0522,
+        "validacion": 0.0567
       },
       {
         "epoca": 250,
-        "entrenamiento": 0.0532,
-        "validacion": 0.0576
+        "entrenamiento": 0.0522,
+        "validacion": 0.0566
       },
       {
         "epoca": 300,
-        "entrenamiento": 0.0531,
-        "validacion": 0.0576
-      },
-      {
-        "epoca": 350,
-        "entrenamiento": 0.0531,
-        "validacion": 0.0576
-      },
-      {
-        "epoca": 400,
-        "entrenamiento": 0.0531,
-        "validacion": 0.0576
+        "entrenamiento": 0.0521,
+        "validacion": 0.0568
       }
     ],
     "tabla": [
       {
         "grupo": "entrenamiento",
-        "clasico": 134,
-        "doble": 53,
-        "enteros": 53,
-        "maximo": 893
+        "clasico": 135,
+        "doble": 52,
+        "enteros": 52,
+        "maximo": 877
       },
       {
         "grupo": "validación",
-        "clasico": 145,
-        "doble": 58,
-        "enteros": 58,
-        "maximo": 614
+        "clasico": 150,
+        "doble": 56,
+        "enteros": 56,
+        "maximo": 802
       }
     ],
-    "mejor_epoca": 205,
-    "mejor_rms": 0.0575
+    "mejor_epoca": 145,
+    "mejor_rms": 0.0565
   },
   "evaluacion": {
     "red": {
@@ -1780,85 +1770,85 @@ window.ATLAS_DATOS = {
   },
   "red": {
     "Weights1": [
-      -42,
-      -30,
-      38,
-      50,
-      -3,
-      -66,
-      -31,
-      -13,
-      -4,
-      24,
-      -22,
-      -45,
-      47,
-      41,
-      -8,
-      71,
-      -71,
-      7,
-      -44,
-      -22,
-      -21,
-      27,
-      -3,
-      -50,
-      -63,
-      -18,
-      88,
-      16,
-      -66,
-      -16,
-      18,
-      -72,
-      -8,
-      16,
-      -61,
-      -39,
-      -32,
-      -30,
-      76,
-      26,
-      52,
-      -37,
+      -36,
+      -28,
+      31,
+      44,
+      -10,
+      -49,
+      -27,
       -12,
-      50,
+      -4,
+      23,
+      -18,
+      -38,
+      42,
+      36,
+      -7,
+      75,
+      -72,
       15,
-      51,
-      -44,
-      78,
-      -37,
-      6,
-      4,
-      -20,
+      -49,
+      -17,
+      -18,
+      24,
+      -62,
+      -1,
       -57,
+      -29,
+      60,
+      14,
+      -57,
+      -14,
+      16,
+      -63,
+      -7,
+      14,
+      -53,
+      -34,
+      -29,
+      -40,
+      54,
+      27,
+      66,
+      -32,
+      -10,
+      64,
+      21,
+      16,
+      -48,
+      114,
+      -33,
+      6,
+      13,
+      -15,
+      -46,
       16,
       127,
-      47
+      41
     ],
     "Bias1": [
-      828,
-      -54,
-      5980,
-      458,
-      910,
-      217,
-      -2464,
-      5957
+      934,
+      173,
+      5616,
+      8488,
+      794,
+      -483,
+      1719,
+      4875
     ],
     "Weights2": [
-      -2918,
-      1928,
-      3530,
-      -120,
-      -4918,
-      3027,
-      -3687,
-      1770
+      -2569,
+      2885,
+      3623,
+      2134,
+      -5637,
+      2896,
+      -3028,
+      1994
     ],
     "Bias2": [
-      3410412
+      5254056
     ]
   },
   "configuracion": {
