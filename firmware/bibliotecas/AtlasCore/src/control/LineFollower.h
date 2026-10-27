@@ -128,6 +128,8 @@ class LineFollower {
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;
+  uint32_t curveSinceMs_ = 0;
+  bool curveAmbiguous_ = false;
   uint32_t lastBridgeMs_ = 0;
   uint32_t centeredSinceMs_ = 0;
   uint32_t lastCornerMs_ = 0;

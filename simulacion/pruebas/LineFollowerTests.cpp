@@ -85,6 +85,109 @@ TEST("Línea perdida: gira hacia el último lado con freno breve de la rueda int
   EXPECT_EQ(rig.drivetrain.rightMotor.pwm, rig.config.lostLine.outerMotorPwm);
 }
 
+TEST("La recuperación prolonga la reversa tras una curva ambigua en ambos sentidos") {
+  for (int first : {4, 10}) {
+    Rig rig;
+    rig.config.lostLine.curveBrakeMs = 115;
+    rig.config.lostLine.curveWindowMs = 250;
+    rig.config.lostLine.outerMotorPwm = 110;
+    const int edge = first == 4 ? 1 : 13;
+    rig.bus.lineAt(edge, edge + 1);
+    rig.follower.start(150, 0);
+    rig.follower.update(900);
+    rig.sensors.resetTracking();
+    rig.bus.lineAt(first, first + 1);
+    for (uint32_t now = 1000; now <= 1120; now++) rig.follower.update(now);
+    rig.bus.lineAt(first - 2, first + 3);
+    rig.follower.update(1121);
+    EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+    rig.bus.fill(220);
+    rig.follower.update(1191);
+    EXPECT_EQ(first == 4 ? rig.drivetrain.leftMotor.pwm : rig.drivetrain.rightMotor.pwm,
+              rig.config.lostLine.innerMotorPwm);
+    rig.follower.update(1237);
+    EXPECT_EQ(first == 4 ? rig.drivetrain.leftMotor.pwm : rig.drivetrain.rightMotor.pwm, 0);
+  }
+}
+
+TEST("La recuperación breve se conserva tras una pérdida repentina y al recuperar la línea") {
+  Rig rig;
+  rig.config.lostLine.curveBrakeMs = 115;
+  rig.config.lostLine.curveWindowMs = 250;
+  rig.config.lostLine.outerMotorPwm = 110;
+  rig.bus.lineAt(4, 5);
+  rig.follower.start(150, 0);
+  rig.follower.update(1000);
+  rig.bus.lineAt(2, 7);
+  rig.follower.update(1001);
+  EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1071);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+  rig.bus.lineAt(4, 5);
+  for (uint32_t now = 1100; now <= 1220; now++) rig.follower.update(now);
+  rig.bus.lineAt(2, 7);
+  rig.follower.update(1221);
+  EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1291);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, rig.config.lostLine.innerMotorPwm);
+  rig.bus.lineAt(4, 5);
+  for (uint32_t now = 1300; now <= 1340; now++) rig.follower.update(now);
+  rig.bus.lineAt(2, 7);
+  rig.follower.update(1341);
+  EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1411);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+}
+
+TEST("Una curva ambigua con mando de giro cerrado conserva el freno breve") {
+  Rig rig;
+  rig.config.lostLine.curveBrakeMs = 115;
+  rig.config.lostLine.curveWindowMs = 250;
+  rig.config.lostLine.outerMotorPwm = 75;
+  rig.bus.lineAt(1, 2);
+  rig.follower.start(100, 0);
+  for (uint32_t now = 1000; now <= 1120; now++) rig.follower.update(now);
+  rig.bus.lineAt(0, 5);
+  rig.follower.update(1121);
+  EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1191);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+}
+
+TEST("Una curva prolongada conserva la recuperación original") {
+  Rig rig;
+  rig.config.lostLine.curveBrakeMs = 115;
+  rig.config.lostLine.curveWindowMs = 250;
+  rig.config.lostLine.outerMotorPwm = 110;
+  rig.bus.lineAt(4, 5);
+  rig.follower.start(150, 0);
+  for (uint32_t now = 1000; now <= 1260; now++) rig.follower.update(now);
+  rig.bus.lineAt(2, 7);
+  rig.follower.update(1261);
+  EXPECT_TRUE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1331);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+}
+
+TEST("Una curva sin lectura ambigua conserva la recuperación original") {
+  Rig rig;
+  rig.config.lostLine.curveBrakeMs = 115;
+  rig.config.lostLine.curveWindowMs = 250;
+  rig.config.lostLine.outerMotorPwm = 110;
+  rig.bus.lineAt(4, 5);
+  rig.follower.start(150, 0);
+  for (uint32_t now = 1000; now <= 1120; now++) rig.follower.update(now);
+  EXPECT_FALSE(rig.follower.lastReading().ambiguous);
+  rig.bus.fill(220);
+  rig.follower.update(1190);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 0);
+}
+
 TEST("Línea perdida por la derecha gira a la derecha") {
   Rig rig;
   rig.bus.lineAt(13, 14);

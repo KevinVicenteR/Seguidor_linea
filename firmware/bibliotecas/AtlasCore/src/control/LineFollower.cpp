@@ -68,6 +68,8 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   running_ = true;
   stopping_ = false;
   lastOnLineMs_ = nowMs;
+  curveSinceMs_ = nowMs;
+  curveAmbiguous_ = false;
   centered_ = true;
   centeredSinceMs_ = nowMs - config_->lostLine.gapStraightMs;
   cornerSeen_ = false;
@@ -113,6 +115,7 @@ void LineFollower::update(uint32_t nowMs) {
       lastError_ = 0;
       historyCount_ = 0;
       reacquiredMs_ = nowMs;
+      curveSinceMs_ = nowMs;
     }
     if (bridging_) {
       lastBridgeMs_ = nowMs;
@@ -268,8 +271,12 @@ int16_t LineFollower::currentVelocity(uint32_t nowMs) const {
 MotorCommand LineFollower::followLine(int16_t velocity, uint32_t nowMs) {
   rememberLastSide();
   lastOnLineMs_ = nowMs;
+  curveAmbiguous_ = reading_.ambiguous;
 
   const int32_t error = static_cast<int32_t>(reading_.position) - kLinePositionCenter;
+  const int32_t magnitude = error < 0 ? -error : error;
+  const int16_t trigger = config_->corner.triggerError;
+  if (magnitude < trigger || (error < 0 ? lastError_ > -trigger : lastError_ < trigger)) curveSinceMs_ = nowMs;
   trackStraightRun(error, nowMs);
   detectCorner(error, nowMs);
   if (guard_.update(error, nowMs)) governor_.penalize(config_->adaptive.speedDropOnOscillation, nowMs);
@@ -447,7 +454,13 @@ MotorCommand LineFollower::bridgeGap(int16_t velocity) const {
 
 MotorCommand LineFollower::recoverLine(uint32_t nowMs) const {
   const LostLineConfig& lost = config_->lostLine;
-  const bool innerBraking = nowMs - lastOnLineMs_ <= lost.innerBrakeMs;
+  const uint32_t curveMs = lastOnLineMs_ - curveSinceMs_;
+  const int16_t turn = pdCorrection_ < 0 ? -pdCorrection_ : pdCorrection_;
+  const bool tightCurve = curveAmbiguous_ && lost.curveBrakeMs > lost.innerBrakeMs && curveMs >= lost.curveBrakeMs &&
+                          curveMs <= lost.curveWindowMs && limitedBase_ > 2L * turn &&
+                          limitedBase_ >= scaleForCorner(lost.outerMotorPwm, lastOnLineMs_);
+  const uint16_t brakeMs = tightCurve ? lost.curveBrakeMs : lost.innerBrakeMs;
+  const bool innerBraking = nowMs - lastOnLineMs_ <= brakeMs;
   const int16_t inner = innerBraking ? lost.innerMotorPwm : 0;
   const int16_t outer = scaleForCorner(lost.outerMotorPwm, nowMs);
 
