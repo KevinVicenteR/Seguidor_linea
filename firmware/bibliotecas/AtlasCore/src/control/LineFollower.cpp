@@ -61,6 +61,7 @@ void LineFollower::start(int16_t cruisePwm, uint32_t nowMs, RunMode mode) {
   startMs_ = nowMs;
   limitedBase_ = 0;
   limitedAtMs_ = nowMs;
+  launching_ = true;
   const SpeedConfig& speed = config_->speed;
   velocityRamp_.start(nowMs + speed.startKickMs, speed.runRampMs, speed.startKickPwm, cruisePwm);
   impellerRamp_.start(nowMs, config_->impeller.runRampMs, 0, config_->impeller.pwm);
@@ -242,9 +243,11 @@ void LineFollower::scaleCrossingHoldToSpeed(int16_t velocity) {
 }
 
 int16_t LineFollower::limitAcceleration(int16_t target, uint32_t nowMs) {
-  const uint16_t accel = config_->speed.maxAccelPwmPerS;
+  const SpeedConfig& speed = config_->speed;
+  const uint16_t accel = launching_ && speed.launchAccelPwmPerS ? speed.launchAccelPwmPerS : speed.maxAccelPwmPerS;
   const uint32_t elapsedMs = nowMs - limitedAtMs_;
   if (accel == 0 || target <= limitedBase_) {
+    if (target > 0) launching_ = false;
     limitedBase_ = target;
     limitedAtMs_ = nowMs;
     return target;
@@ -255,6 +258,7 @@ int16_t LineFollower::limitAcceleration(int16_t target, uint32_t nowMs) {
   if (raised >= target) {
     limitedBase_ = target;
     limitedAtMs_ = nowMs;
+    launching_ = false;
   } else {
     limitedBase_ = static_cast<int16_t>(raised);
     limitedAtMs_ += static_cast<uint32_t>(step) * 1000 / accel;

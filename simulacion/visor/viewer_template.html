@@ -191,8 +191,6 @@ const fmt = (value, digits = 2) => Number(value).toFixed(digits);
 const statusOf = (s) => s.passed ? 'ok' : (s.required ? 'fail' : 'warn');
 const statusText = (s) => s.passed ? 'Completó' : (s.required ? 'Falló' : 'Falló (extremo)');
 
-//  ----- Resumen y lista ------------------------------------------------------
-
 function renderHeader() {
   const total = DATA.scenarios.length;
   const passed = DATA.scenarios.filter((s) => s.passed).length;
@@ -281,8 +279,6 @@ function renderLearning() {
   });
 }
 
-//  ----- Selección y métricas -------------------------------------------------
-
 function current() { return DATA.scenarios[state.index]; }
 function duration() { const t = current().t; return t.length ? t[t.length - 1] / 1000 : 0; }
 
@@ -326,8 +322,6 @@ function renderMetrics(s) {
     `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('');
 }
 
-//  ----- Dibujo ---------------------------------------------------------------
-
 const canvas = $('track');
 const ctx = canvas.getContext('2d');
 const chart = $('chart');
@@ -335,7 +329,6 @@ const chartCtx = chart.getContext('2d');
 let trackPath = null;
 let trackBounds = null;
 
-// Los huecos (painted = 0) se dejan sin dibujar.
 function prepareTrackPath() {
   const track = DATA.tracks[current().track];
   const pts = track.points, painted = track.painted;
@@ -420,7 +413,6 @@ function drawRobot(pose, scale) {
   ctx.translate(pose.x, pose.y);
   ctx.rotate(pose.heading);
   const px = 1 / scale;
-  // chasis
   ctx.fillStyle = 'rgba(70, 120, 230, 0.85)';
   ctx.strokeStyle = '#d7e3ff';
   ctx.lineWidth = 1.5 * px;
@@ -428,12 +420,10 @@ function drawRobot(pose, scale) {
   ctx.moveTo(-0.045, -0.07); ctx.lineTo(0.06, -0.05); ctx.lineTo(c.sensorBarAhead - 0.01, -0.02);
   ctx.lineTo(c.sensorBarAhead - 0.01, 0.02); ctx.lineTo(0.06, 0.05); ctx.lineTo(-0.045, 0.07); ctx.closePath();
   ctx.fill(); ctx.stroke();
-  // ruedas
   ctx.fillStyle = '#111';
   const half = c.wheelBase / 2;
   ctx.fillRect(-0.022, half - 0.006, 0.044, 0.014);
   ctx.fillRect(-0.022, -half - 0.008, 0.044, 0.014);
-  // barra de sensores
   const barHalf = (c.sensorCount - 1) / 2 * c.sensorPitch;
   ctx.fillStyle = pose.trackable ? '#22c55e' : '#ef4444';
   ctx.fillRect(c.sensorBarAhead - 0.006, -barHalf - 0.006, 0.012, 2 * barHalf + 0.012);
@@ -470,7 +460,6 @@ function draw() {
   ctx.lineWidth = DATA.tracks[s.track].lineWidth;
   ctx.stroke(trackPath);
 
-  // estela coloreada por velocidad
   const vmax = Math.max(...s.v) / 100;
   ctx.lineWidth = Math.max(0.006, 2.2 / view.scale);
   for (let k = 1; k <= pose.i; k++) {
@@ -509,7 +498,6 @@ function drawChart(cursor, ratio) {
   chartCtx.strokeStyle = styles.getPropertyValue('--border');
   chartCtx.beginPath(); chartCtx.moveTo(pad, h - pad); chartCtx.lineTo(w - pad, h - pad); chartCtx.stroke();
 
-  // zonas sin línea
   chartCtx.fillStyle = 'rgba(239, 68, 68, 0.18)';
   for (let k = 0; k < s.t.length; k++) {
     if (s.f[k] & 1) continue;
@@ -529,8 +517,6 @@ function drawChart(cursor, ratio) {
   chartCtx.fillStyle = styles.getPropertyValue('--muted');
   chartCtx.fillText('zonas rojas = robot buscando la línea', w - pad - 220 * ratio, 14 * ratio);
 }
-
-//  ----- Reproducción ---------------------------------------------------------
 
 function updatePlayButton() { $('play').textContent = state.playing ? '❚❚ Pausa' : '▶ Reproducir'; }
 

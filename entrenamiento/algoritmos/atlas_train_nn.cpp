@@ -613,22 +613,9 @@ std::vector<Sample> buildDataset(const std::vector<TrackEntry>& tracks, int lead
   return dataset;
 }
 
-void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, std::size_t samples, int lead) {
-  char date[32];
-  const std::time_t now = std::time(nullptr);
-  std::strftime(date, sizeof(date), "%Y-%m-%d", std::localtime(&now));
+void writeDerivativeHeader(const std::string& path, const QuantNet& q) {
   std::ofstream out(path);
-  out << "/*\n"
-      << "  NeuralDerivativeWeights.h - GENERADO por entrenamiento/algoritmos/atlas_train_nn.cpp\n"
-      << "  (atlas_train_nn derivada). No editar a mano.\n\n"
-      << "  Red " << kInputs << " -> " << kHidden << " ReLU -> 1: cambio del error por ciclo de control\n"
-      << "  (adelanto " << lead << " ciclos), desde las pendientes del historial del error.\n"
-      << "  Entrenada el " << date << " con " << samples << " ciclos simulados (parada temprana).\n"
-      << "  Validación (RMS en unidades de error por ciclo):\n"
-      << "    D filtrado clásico " << e.weighted << ", red " << e.quantized << " (máx " << e.maxQuantized
-      << ")\n"
-      << "*/\n"
-      << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
+  out << "#pragma once\n\n#include <stdint.h>\n\n#include \"Progmem.h\"\n#include \"TinyMlp.h\"\n\n"
       << "namespace atlas {\nnamespace neural {\n\n"
       << "constexpr bool kDerivativeTrained = true;\n"
       << "constexpr uint8_t kDerivativeInputs = " << kInputs << ";\n"
@@ -644,7 +631,7 @@ void writeHeader(const std::string& path, const QuantNet& q, const Errors& e, st
       << ",\n"
       << "                                       kDerivativeWeights2, kDerivativeBias2, " << int(q.shift2)
       << "};\n\n"
-      << "}  // namespace neural\n}  // namespace atlas\n";
+      << "}\n}\n";
 }
 
 int train(std::size_t samples, int lead, bool write) {
@@ -678,7 +665,7 @@ int train(std::size_t samples, int lead, bool write) {
   std::printf("  shift1 %d  shift2 %d\n", q.shift1, q.shift2);
   if (!write) return 0;
   const std::string path = std::string(ATLAS_SOURCE_DIR) + "/firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralDerivativeWeights.h";
-  writeHeader(path, q, val, std::min(samples, data.size() - validation), lead);
+  writeDerivativeHeader(path, q);
   std::printf("Pesos escritos en %s\n", path.c_str());
   return 0;
 }

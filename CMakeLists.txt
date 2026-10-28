@@ -1,11 +1,3 @@
-# ATLAS Rev. 1.4 - firmware orientado a objetos + banco de simulación
-#
-#   cmake -S . -B build && cmake --build build -j
-#   ctest --test-dir build --output-on-failure     # pruebas unitarias + simulación rápida
-#   cmake --build build --target simulate          # todas las pistas -> resultados_simulacion/index.html
-#   cmake --build build --target firmware          # compila con PlatformIO (ATmega328P)
-#   cmake --build build --target upload            # sube con PlatformIO + USBasp
-
 cmake_minimum_required(VERSION 3.16)
 project(AtlasLineFollower LANGUAGES CXX)
 
@@ -17,7 +9,6 @@ endif()
 
 enable_testing()
 
-# --- Núcleo de control (el mismo código que corre en el robot) -------------
 file(GLOB_RECURSE ATLAS_CORE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/firmware/bibliotecas/AtlasCore/src/*.cpp)
 add_library(atlas_core STATIC ${ATLAS_CORE_SOURCES})
 set(ATLAS_CORE_INCLUDE_DIRS
@@ -34,8 +25,6 @@ set(ATLAS_CORE_INCLUDE_DIRS
 target_include_directories(atlas_core PUBLIC ${ATLAS_CORE_INCLUDE_DIRS})
 target_compile_options(atlas_core PRIVATE -Wall -Wextra -Wpedantic)
 
-# El firmware AVR se compila con gnu++14 (platformio.ini): se verifica que el
-# núcleo no use nada más moderno.
 add_library(atlas_core_cxx14_check OBJECT ${ATLAS_CORE_SOURCES})
 target_include_directories(atlas_core_cxx14_check PRIVATE ${ATLAS_CORE_INCLUDE_DIRS})
 set_target_properties(atlas_core_cxx14_check PROPERTIES CXX_STANDARD 14)
@@ -43,7 +32,6 @@ target_compile_options(atlas_core_cxx14_check PRIVATE -Wall -Wextra -Wpedantic)
 
 add_subdirectory(simulacion)
 
-# --- Firmware con PlatformIO -----------------------------------------------
 find_program(PLATFORMIO_EXECUTABLE NAMES pio platformio PATHS $ENV{HOME}/.platformio/penv/bin)
 if(PLATFORMIO_EXECUTABLE)
   add_custom_target(firmware

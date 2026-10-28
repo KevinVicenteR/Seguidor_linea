@@ -160,7 +160,6 @@ function draw(parsed) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  // pista (línea negra)
   ctx.strokeStyle = '#1a1a1a';
   ctx.lineWidth = Math.max(2, track.lineWidth * scale);
   ctx.beginPath();
@@ -170,7 +169,6 @@ function draw(parsed) {
 
   const startArc = track.startArc || 0;
   if (parsed && parsed.map && parsed.map.length > 0) {
-    // El mapa ocupa una vuelta: cada tramo mide largo_pista / tramos.
     const binLength = geo.length / parsed.map.length;
     ctx.lineWidth = Math.max(5, 9 * ratio);
     for (let b = 0; b < parsed.map.length; b++) {
@@ -181,13 +179,11 @@ function draw(parsed) {
       ctx.beginPath(); ctx.moveTo(X(p0[0]), Y(p0[1])); ctx.lineTo(X(p1[0]), Y(p1[1])); ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    // huecos detectados
     parsed.gaps.forEach((g) => {
       const p = pointAt(geo, startArc + g * binLength);
       ctx.strokeStyle = '#2f6fde'; ctx.lineWidth = 3 * ratio;
       ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 9 * ratio, 0, 2 * Math.PI); ctx.stroke();
     });
-    // salidas de pista
     parsed.runs.filter((r) => r.failed && r.failureBin >= 0).forEach((r) => {
       const p = pointAt(geo, startArc + r.failureBin * binLength);
       const x = X(p[0]), y = Y(p[1]), s = 11 * ratio;
@@ -197,7 +193,6 @@ function draw(parsed) {
       ctx.fillText(`Intento ${r.n}`, x + s + 4 * ratio, y - s);
     });
   }
-  // INICIO
   const start = pointAt(geo, startArc);
   ctx.fillStyle = '#2f6fde';
   ctx.beginPath(); ctx.arc(X(start[0]), Y(start[1]), 7 * ratio, 0, 2 * Math.PI); ctx.fill();

@@ -707,14 +707,9 @@ std::string join(const std::vector<T>& v, std::size_t from, std::size_t count) {
   return s;
 }
 
-void writeWeights(const std::string& path, const Hierarchy& h, const std::string& summary) {
-  char date[32];
-  const std::time_t now = std::time(nullptr);
-  std::strftime(date, sizeof(date), "%Y-%m-%d", std::localtime(&now));
+void writeWeights(const std::string& path, const Hierarchy& h) {
   std::ofstream out(path);
-  out << "/*\n  NeuralHierarchyWeights.h - GENERADO por entrenamiento/algoritmos/atlas_train_hierarchy.cpp.\n"
-      << "  No editar a mano. Entrenada el " << date << ".\n  " << summary << "\n*/\n"
-      << "#pragma once\n\n#include <stdint.h>\n\n#include \"NeuralHierarchy.h\"\n#include \"Progmem.h\"\n\n"
+  out << "#pragma once\n\n#include <stdint.h>\n\n#include \"NeuralHierarchy.h\"\n#include \"Progmem.h\"\n\n"
       << "namespace atlas {\nnamespace neural {\n\n"
       << "constexpr uint8_t kGateHidden = " << kGateHidden << ";\nconstexpr uint8_t kExpertHidden = " << kExpertHidden << ";\n\n"
       << "ATLAS_PROGMEM const int8_t kGateW1[kGateHidden * kHierarchyInputs] = {" << join(h.gate.w1, 0, h.gate.w1.size()) << "};\n"
@@ -729,7 +724,7 @@ void writeWeights(const std::string& path, const Hierarchy& h, const std::string
       if (which == 1) row = join(h.experts[k].b1, 0, h.experts[k].b1.size());
       if (which == 2) row = join(h.experts[k].w2, 0, h.experts[k].w2.size());
       if (which == 3) row = join(h.experts[k].b2, 0, h.experts[k].b2.size());
-      out << "    {" << row << "}" << (k + 1 < kSit ? "," : "") << "  // " << kSituationNames[k] << "\n";
+      out << "    {" << row << "}" << (k + 1 < kSit ? "," : "") << "\n";
     }
     out << "};\n";
   };
@@ -744,7 +739,7 @@ void writeWeights(const std::string& path, const Hierarchy& h, const std::string
     out << (k ? ",\n     " : "") << "{kHierarchyInputs, kExpertHidden, 2, kExpertW1[" << k << "], kExpertB1[" << k << "], 7, kExpertW2["
         << k << "], kExpertB2[" << k << "], 8}";
   }
-  out << "}};\n\n}  // namespace neural\n}  // namespace atlas\n";
+  out << "}};\n\n}\n}\n";
 }
 
 std::string gainsJson(const Gains& g) {
@@ -1002,7 +997,7 @@ int main(int argc, char** argv) {
 
   if (ok && haveBest) {
     const std::string path = std::string(ATLAS_SOURCE_DIR) + "/firmware/bibliotecas/AtlasCore/src/red_neuronal/NeuralHierarchyWeights.h";
-    writeWeights(path, trained, "Prueba final: " + summarize(test[1]) + " (referencia " + summarize(test[0]) + ")");
+    writeWeights(path, trained);
     std::printf("Pesos escritos en %s\nKp/Kd entrenados: seguro %.5f/%.4f  rápido %.5f/%.4f\n", path.c_str(),
                 trainedGains.safeKp, trainedGains.safeKd, trainedGains.fastKp, trainedGains.fastKd);
   } else {

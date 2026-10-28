@@ -66,6 +66,7 @@ struct SpeedConfig {
   int16_t startKickPwm = 100;
   uint16_t startKickMs = 200;
   uint16_t maxAccelPwmPerS = 0;
+  uint16_t launchAccelPwmPerS = 0;
 };
 
 struct ImpellerConfig {

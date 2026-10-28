@@ -11,6 +11,7 @@ constexpr RobotConfig firmwareConfig(RobotConfig config, bool neural = kUseNeura
   config.speed.stepPwm = 10;
   config.speed.runRampMs = 150;
   config.speed.maxAccelPwmPerS = 400;
+  config.speed.launchAccelPwmPerS = 150;
   config.speed.startKickMs = 0;
   config.impeller.pwm = 0;
   config.impeller.spinWithReady = false;

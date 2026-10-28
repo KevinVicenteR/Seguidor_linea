@@ -239,6 +239,19 @@ TEST("El limitador de aceleración frena la subida de velocidad, no la bajada") 
   EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 75);
 }
 
+TEST("Al dar GO el despegue sube más lento que el limitador normal") {
+  Rig rig;
+  rig.config.speed.maxAccelPwmPerS = 400;
+  rig.config.speed.launchAccelPwmPerS = 100;
+  rig.bus.lineAt(7, 8);
+  rig.follower.start(150, 0);
+  rig.follower.update(0);
+  rig.follower.update(100);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 10);
+  rig.follower.update(1500);
+  EXPECT_EQ(rig.drivetrain.leftMotor.pwm, 150);
+}
+
 TEST("Frenado en curva: con la línea lejos del centro baja la velocidad base") {
   Rig rig;
   rig.config.control.curveSlowdownPercent = 40;

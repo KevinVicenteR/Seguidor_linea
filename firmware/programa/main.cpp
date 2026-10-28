@@ -2,7 +2,9 @@
 
 #include "AtlasApp.h"
 #include "AvrClock.h"
+#ifdef ATLAS_DIAGNOSTICS
 #include "AvrDiagnostics.h"
+#endif
 #include "AvrDrivetrain.h"
 #include "AvrEepromStorage.h"
 #include "AvrLineSensorBus.h"
@@ -33,11 +35,15 @@ AvrDrivetrain drivetrain(kLeftMotorPolarity, kRightMotorPolarity, kSafeConfig.mo
 
 LineSensorArray sensors(sensorBus, kSafeConfig.sensors);
 LineFollower follower(sensors, drivetrain, kSafeConfig);
+#ifdef ATLAS_DIAGNOSTICS
 AvrDiagnostics diagnostics(robotClock, panel, panel, sensors, drivetrain, kSafeConfig, &eeprom, &trackMap);
+#endif
 
 AppOptions makeAppOptions() {
   AppOptions options;
+#ifdef ATLAS_DIAGNOSTICS
   options.diagnostics = &diagnostics;
+#endif
   options.fastConfig = &kFastConfig;
   options.storage = &eeprom;
   options.trackMap = &trackMap;

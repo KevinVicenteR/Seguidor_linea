@@ -125,6 +125,7 @@ class LineFollower {
   uint32_t startMs_ = 0;
   int16_t limitedBase_ = 0;
   uint32_t limitedAtMs_ = 0;
+  bool launching_ = false;
   bool running_ = false;
   bool stopping_ = false;
   uint32_t lastOnLineMs_ = 0;
