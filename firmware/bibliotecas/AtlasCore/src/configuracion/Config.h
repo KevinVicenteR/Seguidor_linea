@@ -82,10 +82,10 @@ struct LostLineConfig {
   uint16_t innerBrakeMs = 54;
   uint16_t curveBrakeMs = 0;
   uint16_t curveWindowMs = 0;
-  uint16_t gapBridgeMs = 200;
+  uint16_t gapBridgeMs = 100;
   int16_t gapCenterTolerance = 1500;
   uint16_t gapStraightMs = 25;
-  uint16_t gapChainMs = 300;
+  uint16_t gapChainMs = 200;
 };
 
 struct CornerConfig {
