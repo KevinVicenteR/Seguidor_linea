@@ -184,9 +184,9 @@ TEST("Ajustes de despliegue conservan velocidades y activan las redes entrenadas
   for (bool neural : {false, true}) {
     const auto safe = firmwareSafeConfig(neural);
     const auto fast = firmwareFastConfig(neural);
-    EXPECT_EQ(safe.speed.basePwm, 40);
+    EXPECT_EQ(safe.speed.basePwm, 130);
     EXPECT_EQ(safe.impeller.pwm, 0);
-    EXPECT_EQ(fast.speed.basePwm, 40);
+    EXPECT_EQ(fast.speed.basePwm, 130);
     EXPECT_EQ(fast.impeller.pwm, 0);
     EXPECT_EQ(safe.sensors.neuralPosition, neural);
     EXPECT_FALSE(safe.control.neuralGains);
