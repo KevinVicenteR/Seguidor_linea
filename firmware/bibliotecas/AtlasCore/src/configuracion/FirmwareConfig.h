@@ -5,17 +5,18 @@ namespace atlas {
 constexpr bool kUseNeuralNetwork = true;
 
 constexpr RobotConfig firmwareConfig(RobotConfig config, bool neural = kUseNeuralNetwork) {
-  config.speed.basePwm = 40;
-  config.speed.minPwm = 40;
-  config.speed.maxPwm = 40;
+  config.speed.basePwm = 130;
+  config.speed.minPwm = 60;
+  config.speed.maxPwm = 250;
   config.speed.stepPwm = 10;
   config.speed.runRampMs = 150;
   config.speed.maxAccelPwmPerS = 400;
-  config.speed.launchAccelPwmPerS = 10;
+  config.speed.launchAccelPwmPerS = 100;
   config.speed.startKickMs = 0;
   config.impeller.pwm = 0;
   config.impeller.spinWithReady = false;
   config.lostLine.outerMotorPwm = 110;
+  config.lostLine.innerMotorPwm = 0;
   config.lostLine.curveBrakeMs = 115;
   config.lostLine.curveWindowMs = 250;
   config.corner.speedPercent = 45;
@@ -31,7 +32,7 @@ constexpr RobotConfig firmwareSafeConfig(bool neural = kUseNeuralNetwork) {
 
 constexpr RobotConfig firmwareFastConfig(bool neural = kUseNeuralNetwork) {
   RobotConfig config = firmwareConfig(fastProfile(), neural);
-  config.planner.maxPwm = 40;
+  config.planner.maxPwm = 225;
   config.planner.fullTurnPwm = 140;
   return config;
 }
