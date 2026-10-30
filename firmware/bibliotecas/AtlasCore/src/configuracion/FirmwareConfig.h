@@ -16,6 +16,7 @@ constexpr RobotConfig firmwareConfig(RobotConfig config, bool neural = kUseNeura
   config.impeller.pwm = 0;
   config.impeller.spinWithReady = false;
   config.lostLine.outerMotorPwm = 110;
+  config.lostLine.innerMotorPwm = 0;
   config.lostLine.curveBrakeMs = 115;
   config.lostLine.curveWindowMs = 250;
   config.corner.speedPercent = 45;

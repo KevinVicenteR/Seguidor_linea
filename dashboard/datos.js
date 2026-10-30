@@ -1,5 +1,5 @@
 window.ATLAS_DATOS = {
-  "generado": "2026-10-28T11:35:29.993829+00:00",
+  "generado": "2026-10-30T12:25:45.470215+00:00",
   "con_red": [
     {
       "escenario": "Pista de competencia · PWM 130 · firmware · Intento 1 (reconocimiento)",
@@ -1852,6 +1852,7 @@ window.ATLAS_DATOS = {
     "speed.startKickMs": 0.0,
     "impeller.pwm": 0.0,
     "lostLine.outerMotorPwm": 110.0,
+    "lostLine.innerMotorPwm": 0.0,
     "lostLine.curveBrakeMs": 115.0,
     "lostLine.curveWindowMs": 250.0,
     "corner.speedPercent": 45.0,
